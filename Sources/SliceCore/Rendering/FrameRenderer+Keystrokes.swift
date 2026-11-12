@@ -19,18 +19,31 @@ extension FrameRenderer {
         guard fontSize >= 4 else { return nil }
         let lift = clearance()
         var layer: CIImage?
+        let maxWidth = output.width - 2 * Self.keycapInset(output)
         for state in states where state.opacity > 0.002 {
-            let key = "\(state.label)|\(state.count)|\(fontSize)" as NSString
+            let key = "\(state.label)|\(state.count)|\(state.isText)|\(settings.style.rawValue)|\(fontSize)|\(Int(maxWidth))" as NSString
             let cap: CIImage
-            if let cached = keycapCache.object(forKey: key) {
+            if state.isText {
+                // Changes every frame while letters come in, so it's put together from kept pieces instead.
+                guard let line = typedLineImage(state.label, reveal: state.reveal, style: settings.style, fontSize: fontSize,
+                                                maxWidth: maxWidth) else { continue }
+                cap = line
+            } else if let cached = keycapCache.object(forKey: key) {
                 cap = cached
             } else {
-                guard let made = Self.keycapImage(state.label, count: state.count, fontSize: fontSize) else { continue }
+                guard let made = Self.keycapImage(state.label, count: state.count, isText: state.isText, style: settings.style,
+                                                  fontSize: fontSize, maxWidth: maxWidth) else { continue }
                 keycapCache.setObject(made, forKey: key)
                 cap = made
             }
             let size = cap.extent.insetBy(dx: Self.keycapMargin(fontSize), dy: Self.keycapMargin(fontSize)).size
-            let rect = Self.keycapRect(size: size, position: settings.position, clearance: lift, camera: camera, output: output)
+            var rect = Self.keycapRect(size: size, position: settings.position, alignment: settings.alignment, clearance: lift,
+                                       camera: camera, output: output, snap: !state.isText)
+            // Stacked, older presses step away from the edge as newer ones arrive.
+            if state.slot > 0.0005 {
+                let step = CGFloat(state.slot) * (fontSize * 2 + (fontSize * 0.4).rounded())
+                rect.origin.y += settings.position == .bottom ? -step : step
+            }
 
             var image = cap
             if state.blur > 0.002 {
@@ -54,65 +67,23 @@ extension FrameRenderer {
         return layer
     }
 
-    static func keycapMargin(_ fontSize: CGFloat) -> CGFloat { ceil(fontSize * 0.9) }
+    /// How far a keystroke pinned to the left or right stays from that edge.
+    static func keycapInset(_ output: CGSize) -> CGFloat { (min(output.width, output.height) * 0.06).rounded() }
 
-    static func keycapRect(size: CGSize, position: KeystrokeSettings.Position, clearance: CGFloat, camera: CGRect?,
-                           output: CGSize) -> CGRect {
+    /// `snap` keeps a press on whole pixels, crisp; a typed line, whose width changes every frame, isn't, so it glides.
+    static func keycapRect(size: CGSize, position: KeystrokeSettings.Position, alignment: KeystrokeSettings.Alignment = .center,
+                           clearance: CGFloat, camera: CGRect?, output: CGSize, snap: Bool = true) -> CGRect {
         let atBottom = position == .bottom
         let margin = output.height * 0.06
-        var rect = CGRect(x: ((output.width - size.width) / 2).rounded(), y: 0, width: size.width, height: size.height)
+        let inset = keycapInset(output)
+        let x: CGFloat = switch alignment {
+        case .leading: inset
+        case .center: snap ? ((output.width - size.width) / 2).rounded() : (output.width - size.width) / 2
+        case .trailing: output.width - inset - size.width
+        }
+        var rect = CGRect(x: x, y: 0, width: size.width, height: size.height)
         rect.origin.y = (atBottom ? output.height - margin - size.height - clearance : margin + clearance).rounded()
         if let camera { rect = clear(rect, of: camera, atBottom: atBottom, margin: margin, output: output) }
         return rect
-    }
-
-    static func keycapImage(_ label: String, count: Int, fontSize f: CGFloat) -> CIImage? {
-        let font = NSFont.systemFont(ofSize: f, weight: .semibold)
-        let text = NSMutableAttributedString(string: label, attributes: [
-            .font: font, .foregroundColor: CGColor(gray: 1, alpha: 1), .kern: f * 0.02,
-        ])
-        if count > 1 {
-            text.append(NSAttributedString(string: "  ×\(count)", attributes: [
-                .font: NSFont.systemFont(ofSize: f * 0.78, weight: .medium), .foregroundColor: CGColor(gray: 1, alpha: 0.55),
-            ]))
-        }
-        let line = CTLineCreateWithAttributedString(text)
-        let textWidth = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
-        let height = (f * 2).rounded()
-        let pad = f * 0.66
-        let width = max((textWidth + 2 * pad).rounded(.up), height)
-        let m = keycapMargin(f)
-        guard let ctx = CGContext(data: nil, width: Int(width + 2 * m), height: Int(height + 2 * m), bitsPerComponent: 8,
-                                  bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
-        let plate = CGRect(x: m, y: m, width: width, height: height)
-        let radius = height * 0.25
-        let path = CGPath(roundedRect: plate, cornerWidth: radius, cornerHeight: radius, transform: nil)
-        ctx.saveGState()
-        ctx.setShadow(offset: CGSize(width: 0, height: -f * 0.12), blur: f * 0.6, color: CGColor(gray: 0, alpha: 0.32))
-        ctx.addPath(path)
-        ctx.setFillColor(CGColor(gray: 0, alpha: 1))
-        ctx.fillPath()
-        ctx.restoreGState()
-        ctx.saveGState()
-        ctx.addPath(path)
-        ctx.clip()
-        ctx.setBlendMode(.copy)
-        let space = CGColorSpace(name: CGColorSpace.sRGB)!
-        let colors = [CGColor(colorSpace: space, components: [0.03, 0.02, 0.045, 0.97])!,
-                      CGColor(colorSpace: space, components: [0.11, 0.09, 0.14, 0.92])!] as CFArray
-        if let gradient = CGGradient(colorsSpace: space, colors: colors, locations: [0, 1]) {
-            ctx.drawLinearGradient(gradient, start: CGPoint(x: 0, y: plate.maxY), end: CGPoint(x: 0, y: plate.minY), options: [])
-        }
-        ctx.restoreGState()
-        let lw = max(f * 0.035, 1)
-        let r = radius - lw / 2
-        ctx.addPath(CGPath(roundedRect: plate.insetBy(dx: lw / 2, dy: lw / 2), cornerWidth: r, cornerHeight: r, transform: nil))
-        ctx.setStrokeColor(CGColor(gray: 1, alpha: 0.09))
-        ctx.setLineWidth(lw)
-        ctx.strokePath()
-        ctx.textPosition = CGPoint(x: plate.minX + (width - textWidth) / 2, y: plate.minY + (height - font.capHeight) / 2)
-        CTLineDraw(line, ctx)
-        return ctx.makeImage().map { CIImage(cgImage: $0).transformed(by: CGAffineTransform(translationX: -m, y: -m)) }
     }
 }
