@@ -61,6 +61,48 @@ final class DeviceImportTests: XCTestCase {
         XCTAssertLessThan(at(2, 2).w, 0.05, "outside the frame stays see-through")
     }
 
+    func testRecordingsOwnIslandIsKeptOverTheFrames() async throws {
+        let size = CGSize(width: 660, height: 1434)
+        let phone = try XCTUnwrap(DeviceVideoImporter.phone(forVideo: size))
+        let pick = try XCTUnwrap(DeviceTests.catalog.frame(for: phone))
+        let frame = try XCTUnwrap(try DeviceTests.catalog.definition(model: pick.model, color: DeviceTests.catalog.colors(for: pick.model)[0]))
+        let layout = DeviceLayout(frame: frame, streamSize: size)
+        let cutout = try XCTUnwrap(layout.cutoutRect)
+        // The island in the recording: where the frame's goes, a little off its size, in Core Image's bottom-left origin.
+        let a = try XCTUnwrap(layout.streamPixel(canvas: CGPoint(x: cutout.minX, y: cutout.minY)))
+        let b = try XCTUnwrap(layout.streamPixel(canvas: CGPoint(x: cutout.maxX, y: cutout.maxY)))
+        let island = CGRect(x: a.x + 6, y: size.height - b.y - 3, width: b.x - a.x - 12, height: b.y - a.y + 6)
+        let whole = CGRect(origin: .zero, size: size)
+        let light = CIImage(color: CIColor(red: 0.95, green: 0.95, blue: 0.96)).cropped(to: whole)
+        let withIsland = CIImage(color: .black).cropped(to: island).composited(over: light)
+        let ctx = CIContext()
+        func cg(_ image: CIImage) throws -> CGImage { try XCTUnwrap(ctx.createCGImage(image, from: whole)) }
+        XCTAssertEqual(DeviceVideoImporter.showsIsland(try cg(withIsland), layout: layout), true)
+        XCTAssertEqual(DeviceVideoImporter.showsIsland(try cg(light), layout: layout), false, "an iPhone's own recording has none")
+        XCTAssertNil(DeviceVideoImporter.showsIsland(try cg(CIImage(color: .black).cropped(to: whole)), layout: layout),
+                     "a dark status bar can't tell")
+
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("device-import-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let (bundle, _) = try ProjectBundle.create(name: "Import", in: dir)
+        let source = dir.appendingPathComponent("Island.mov")
+        try await ExportTests.makeMovie(url: source, image: withIsland, duration: 0.5)
+        let clip = try await DeviceVideoImporter.importVideo(source, into: bundle, phone: phone, frame: frame)
+        XCTAssertNil(clip.device?.cutout, "nothing for the 3D phone to paint out")
+
+        // Its island shows through the frame where the frame's own would be: the recording's edge, not the frame's.
+        let generator = AVAssetImageGenerator(asset: AVURLAsset(url: bundle.url.appendingPathComponent(clip.screenFile)))
+        generator.requestedTimeToleranceBefore = .zero
+        let (image, _) = try await generator.image(at: CMTime(value: 1, timescale: 10))
+        let px = try XCTUnwrap(Self.pixels(image))
+        let k = CGFloat(image.width) / layout.canvas.width
+        let rim = CGPoint(x: (cutout.minX + cutout.width * 0.02) * layout.canvas.width * k, y: cutout.midY * layout.canvas.height * k)
+        XCTAssertGreaterThan(px(Int(rim.x), Int(rim.y)).x, 0.8, "the frame's island isn't drawn over the recording")
+        let middle = CGPoint(x: cutout.midX * layout.canvas.width * k, y: cutout.midY * layout.canvas.height * k)
+        XCTAssertLessThan(px(Int(middle.x), Int(middle.y)).x, 0.1, "the recording's is")
+    }
+
     static func pixels(_ image: CGImage) -> ((Int, Int) -> SIMD4<Float>)? {
         let w = image.width, h = image.height
         var data = [UInt8](repeating: 0, count: w * h * 4)
