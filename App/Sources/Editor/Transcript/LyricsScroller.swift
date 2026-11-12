@@ -36,7 +36,6 @@ final class LyricsScroller {
 
     private static let trail = UnitCurve.bezier(startControlPoint: UnitPoint(x: 0.4, y: 0.8), endControlPoint: UnitPoint(x: 0.6, y: 1))
     private static let trailDuration = 0.42
-
     private var maxY: CGFloat { max(contentHeight - viewport, 0) }
 
     func scroll(to target: CGFloat, trailFrom epicenter: Int?) {
