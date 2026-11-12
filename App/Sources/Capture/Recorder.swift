@@ -19,6 +19,8 @@ final class Recorder: NSObject, @unchecked Sendable {
         var fps = Settings.best
         var screenAudio = true
         var keys = true
+        /// Typed characters are recorded along with shortcuts, to show what was typed.
+        var typing = false
         /// The camera shows on screen while recording (`CameraBubble`).
         var showCamera = true
 
@@ -164,7 +166,7 @@ final class Recorder: NSObject, @unchecked Sendable {
         }
         deviceLostAt = device != nil && deviceStreamMissing ? Date() : nil
         cursor.start(globalRect: target.rect, mapping: device?.mapping,
-                     keys: settings.keys && device == nil, deviceWindowsInPicture: resolved != nil, analysis: writer.analysis)
+                     keys: settings.keys && device == nil, typing: settings.typing, deviceWindowsInPicture: resolved != nil, analysis: writer.analysis)
         keepRecoverable(writer, captureRect: target.rect)
     }
 
