@@ -8,9 +8,9 @@
 import AppKit
 import AVFoundation
 
-/// The camera on screen while recording, so you can see yourself. It's one of Slice's own windows, which recordings
-/// leave out; the camera itself is recorded on its own and laid out in the editor. Drag it anywhere, double-click to
-/// change its size; both are kept for next time.
+/// The camera on screen while setting up and recording, so you can see yourself. It's one of Slice's own windows,
+/// which recordings leave out; the camera itself is recorded on its own and laid out in the editor. Drag it anywhere,
+/// double-click to change its size; both are kept for next time.
 @MainActor
 final class CameraBubble {
     static let shared = CameraBubble()
@@ -31,7 +31,13 @@ final class CameraBubble {
         set { UserDefaults.standard.set(newValue.map(NSStringFromPoint), forKey: "cameraBubble.origin") }
     }
 
+    /// Showing it again with another session, as Record hands the setup preview's camera to the recorder's, swaps
+    /// the picture in place.
     func show(session: AVCaptureSession) {
+        if let view = panel?.contentView as? CameraBubbleView {
+            view.attach(session)
+            return
+        }
         hide(animated: false)
         let side = Self.sizes[large ? 1 : 0]
         let panel = NSPanel(contentRect: frame(side: side), styleMask: [.borderless, .nonactivatingPanel],
@@ -104,16 +110,26 @@ private final class CameraBubbleView: NSView {
         super.init(frame: .zero)
         wantsLayer = true
         preview.videoGravity = .resizeAspectFill
-        // Setting mirroring on a connection that doesn't support it raises an exception.
-        if let c = preview.connection, c.isVideoMirroringSupported {
-            c.automaticallyAdjustsVideoMirroring = false
-            c.isVideoMirrored = true
-        }
         preview.masksToBounds = true
         preview.borderWidth = 1.5
         preview.borderColor = NSColor.white.withAlphaComponent(0.3).cgColor
         preview.backgroundColor = NSColor.black.cgColor
         layer?.addSublayer(preview)
+        mirror()
+    }
+
+    func attach(_ session: AVCaptureSession) {
+        guard preview.session !== session else { return }
+        preview.session = session
+        mirror()
+    }
+
+    private func mirror() {
+        // Setting mirroring on a connection that doesn't support it raises an exception.
+        if let c = preview.connection, c.isVideoMirroringSupported {
+            c.automaticallyAdjustsVideoMirroring = false
+            c.isVideoMirrored = true
+        }
     }
 
     @available(*, unavailable)
