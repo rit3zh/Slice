@@ -27,6 +27,7 @@ struct CaptureBar: View {
     @AppStorage("setup.frameRate") var fps = Recorder.Settings.best
     @AppStorage("setup.screenAudio") var screenAudio = true
     @AppStorage("setup.keys") var keys = true
+    @AppStorage("setup.typing") var typing = false
     @AppStorage("setup.showCamera") var showCamera = true
     @State var keysAllowed = AXIsProcessTrusted()
     @State var displayID: CGDirectDisplayID?
@@ -81,6 +82,7 @@ struct CaptureBar: View {
                 withAnimation(.spring(response: 0.45, dampingFraction: 0.72)) { appeared = true }
             }
             .onChange(of: compact) { if compact { picker = nil } }
+            .onChange(of: stage, initial: true) { BarClickThrough.track(stage == .setup ? nil : stage.surfaceSize) }
             .onChange(of: areaMode, initial: true) { areaOverlay.present(areaMode) }
             .onChange(of: kind == .window && stage == .setup, initial: true) { windowPicker.present(kind == .window && stage == .setup) }
             .onChange(of: windows.map(\.windowID), initial: true) { windowPicker.recordable = Set(windows.map(\.windowID)) }
@@ -95,17 +97,23 @@ struct CaptureBar: View {
                 windowPicker.onUnknown = { Task { await loadWindows() } }
             }
             .onDisappear {
+                if model.recordingPhase == nil { CameraBubble.shared.hide() }
+                BarClickThrough.track(nil)
                 areaOverlay.present(.hidden)
                 windowPicker.present(false)
             }
+            .onChange(of: setupBubble, initial: true) { updateSetupBubble() }
             .onChange(of: model.recordingPhase == nil) { if model.recordingPhase == nil { starting = false } }
             .onAppear { if model.recordingPhase == nil { starting = false } }
     }
 
     var controls: some View {
         HStack(spacing: 0) {
+            BarGrip()
+                .padding(.leading, 6)
             CloseButton { model.cancelSetup() }
-                .padding(.horizontal, 14)
+                .padding(.leading, 4)
+                .padding(.trailing, 14)
             BarDivider()
             HStack(spacing: 2) {
                 ForEach(Kind.allCases, id: \.self) { k in
@@ -130,6 +138,7 @@ struct CaptureBar: View {
             .padding(.horizontal, 14)
         }
         .frame(height: 72)
+        .barDragBackground()
         .fixedSize()
         .environment(\.barGlide, BarGlide(tracker: glide, namespace: hoverSpace))
         .onChange(of: picker) { if picker == .mic || picker == .camera { captureDevices.refresh() } }
@@ -165,6 +174,24 @@ struct CaptureBar: View {
             if !(micChosen && micID.isEmpty), !mics.contains(where: { $0.uniqueID == micID }) {
                 micID = AVCaptureDevice.default(for: .audio)?.uniqueID ?? ""
             }
+        }
+    }
+
+    // MARK: - Camera bubble
+
+    /// The camera preview to show in the bubble while setting up, so you can see how you look and where it sits
+    /// before pressing Record.
+    var setupBubble: ObjectIdentifier? {
+        guard stage == .setup, showCamera, cameraName != nil else { return nil }
+        return cameraPreview.session.map(ObjectIdentifier.init)
+    }
+
+    func updateSetupBubble() {
+        if setupBubble != nil, let session = cameraPreview.session {
+            CameraBubble.shared.show(session: session)
+        } else if model.recordingPhase == nil, !starting {
+            // Once Record is pressed the recording takes the bubble over, or puts it away.
+            CameraBubble.shared.hide()
         }
     }
 
@@ -251,7 +278,7 @@ struct CaptureBar: View {
         }
         let settings = Recorder.Settings(source: source, cameraID: cameraID.isEmpty ? nil : cameraID,
                                          micID: micID.isEmpty ? nil : micID, fps: fps, screenAudio: screenAudio,
-                                         keys: keys, showCamera: showCamera)
+                                         keys: keys, typing: typing, showCamera: showCamera)
         model.startRecording(settings: settings, appendTo: model.setupAppendTo)
     }
 }
