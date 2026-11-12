@@ -109,7 +109,7 @@ public struct RenderScene {
         let duration = project.duration
 
         let starts = clipStarts
-        let aspects = geometries.map { $0.contentRect.width / max($0.contentRect.height, 1) }
+        let aspects = geometries.map { $0.frameRect.width / max($0.frameRect.height, 1) }
         func cameraStates(_ layout: CameraLayout) -> (Double) -> CameraState {
             let states = (aspects.isEmpty ? [nil] : aspects.map(Optional.some)).map {
                 CameraLayoutResolver.state(for: layout, output: output, style: style, contentAspect: $0)
