@@ -5,7 +5,101 @@
 //  Created by rit3zh CX on 10/1/26.
 //
 
+import AppKit
 import SwiftUI
+
+/// Dots at the leading edge saying the bar can be dragged; the drag itself works from any gap in the bar. A double-click
+/// puts the bar back at the top centre.
+struct BarGrip: View {
+    @State private var hovering = false
+
+    var body: some View {
+        Grid(horizontalSpacing: 3, verticalSpacing: 3) {
+            ForEach(0 ..< 3, id: \.self) { _ in
+                GridRow {
+                    Circle().frame(width: 2.5, height: 2.5)
+                    Circle().frame(width: 2.5, height: 2.5)
+                }
+            }
+        }
+        .foregroundStyle(.white.opacity(hovering ? 0.6 : 0.3))
+        .frame(width: LiveBar.grip, height: 44)
+        // On top, not behind: SwiftUI keeps presses on views it tracks the pointer over, so a drag view underneath
+        // never heard of them.
+        .overlay(BarDragArea(resetsOnDoubleClick: true, tooltip: "Drag to move, double-click to put back") { hovering = $0 })
+        .animation(Bar.hover, value: hovering)
+    }
+}
+
+extension View {
+    /// Gaps between the bar's buttons move the window.
+    func barDragBackground() -> some View {
+        background(BarDragArea(resetsOnDoubleClick: false))
+    }
+}
+
+/// Moves the bar's window from a press on it. It sees the mouse-down itself, so a drag starts on the first press
+/// whether or not the bar is the active window. It shows the open hand and reports the pointer coming and going, as
+/// SwiftUI's hover would.
+struct BarDragArea: NSViewRepresentable {
+    var resetsOnDoubleClick: Bool
+    var tooltip: String?
+    var onHover: ((Bool) -> Void)?
+
+    func makeNSView(context: Context) -> DragView { DragView() }
+
+    func updateNSView(_ view: DragView, context: Context) {
+        view.resetsOnDoubleClick = resetsOnDoubleClick
+        view.toolTip = tooltip
+        view.onHover = onHover
+    }
+
+    final class DragView: NSView {
+        var resetsOnDoubleClick = false
+        var onHover: ((Bool) -> Void)?
+
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+        /// Where the press started on screen, and where the window was then.
+        private var start: (mouse: NSPoint, origin: NSPoint)?
+
+        // The window is moved here by hand: AppKit's own `performDrag` doesn't start on this SwiftUI window ("window move
+        // completed without beginning"), and neither did SwiftUI's `WindowDragGesture`.
+        override func mouseDown(with event: NSEvent) {
+            if event.clickCount == 2 {
+                if resetsOnDoubleClick { BarPosition.reset() }
+                return
+            }
+            guard let window else { return }
+            start = (window.convertPoint(toScreen: event.locationInWindow), window.frame.origin)
+            NSCursor.closedHand.push()
+        }
+
+        override func mouseDragged(with event: NSEvent) {
+            guard let start, let window else { return }
+            let p = window.convertPoint(toScreen: event.locationInWindow)
+            window.setFrameOrigin(NSPoint(x: start.origin.x + p.x - start.mouse.x, y: start.origin.y + p.y - start.mouse.y))
+        }
+
+        override func mouseUp(with event: NSEvent) {
+            guard start != nil else { return }
+            start = nil
+            NSCursor.pop()
+        }
+
+        override func resetCursorRects() { addCursorRect(bounds, cursor: .openHand) }
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            trackingAreas.forEach(removeTrackingArea)
+            addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                           owner: self))
+        }
+
+        override func mouseEntered(with event: NSEvent) { onHover?(true) }
+        override func mouseExited(with event: NSEvent) { onHover?(false) }
+    }
+}
 
 struct CloseButton: View {
     let action: () -> Void
