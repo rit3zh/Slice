@@ -54,32 +54,123 @@ public enum DeviceVideoImporter {
                                          screen: CGRect(x: 0, y: 0, width: 1, height: 1))
             return clip
         }
-        let asset = AVURLAsset(url: source)
-        guard let track = try await asset.loadTracks(withMediaType: .video).first else {
-            throw ClipImporter.Failure.noVideo(source.lastPathComponent)
-        }
-        let duration = try await asset.load(.duration).seconds
-        let size = try await ClipImporter.videoSize(of: source)
-        guard let compositor = DeviceCompositor.shared, let textures = try? compositor.textures(for: frame) else { throw Failure.noFrame }
-        let layout = DeviceLayout(frame: frame, streamSize: size)
-        guard let renderer = DeviceSurfaceRenderer(compositor: compositor, size: layout.canvas) else { throw Failure.noFrame }
+        let framing = try await Framing(source, in: frame)
 
         let id = UUID()
         let (dir, rel) = try bundle.makeClipFolder(id: id)
         do {
-            try await bake(asset, track: track, duration: duration, into: dir.appendingPathComponent("screen.mov"),
-                           draw: { renderer.renderNow(screen: $0, frame: textures, layout: layout) }, size: renderer.size,
-                           progress: progress)
+            try await framing.write(to: dir.appendingPathComponent("screen.mov"), progress: progress)
         } catch {
             try? FileManager.default.removeItem(at: dir)
             throw error is CancellationError ? error : Failure.unreadable(source.lastPathComponent)
         }
-        var clip = Clip(id: id, screenFile: "\(rel)/screen.mov", micFile: nil, duration: duration, screenPixelSize: renderer.size,
+        var clip = Clip(id: id, screenFile: "\(rel)/screen.mov", micFile: nil, duration: framing.duration, screenPixelSize: framing.size,
                         captureRect: .zero)
-            .withScreenAudio(try await ClipImporter.audio(of: asset, into: dir, relative: rel))
+            .withScreenAudio(try await ClipImporter.audio(of: framing.asset, into: dir, relative: rel))
         clip.device = RecordedDevice(name: phone.name, identifier: phone.identifier, frame: frame.model, color: frame.color.rawValue,
-                                     screen: layout.screenRect, cutout: layout.cutoutRect)
+                                     screen: framing.layout.screenRect, cutout: framing.cutout)
         return clip
+    }
+
+    /// A video made ready to draw into a frame.
+    struct Framing {
+        let asset: AVURLAsset
+        let track: AVAssetTrack
+        let duration: Double
+        let layout: DeviceLayout
+        let textures: DeviceFrameTextures
+        let renderer: DeviceSurfaceRenderer
+        /// The frame's island or notch, unless the recording has its own there.
+        let cutout: CGRect?
+
+        var size: CGSize { renderer.size }
+
+        init(_ source: URL, in frame: DeviceFrameDefinition) async throws {
+            asset = AVURLAsset(url: source)
+            guard let track = try await asset.loadTracks(withMediaType: .video).first else {
+                throw ClipImporter.Failure.noVideo(source.lastPathComponent)
+            }
+            self.track = track
+            duration = try await asset.load(.duration).seconds
+            layout = DeviceLayout(frame: frame, streamSize: try await ClipImporter.videoSize(of: source))
+            // A recording with an island of its own (an app that animates it, say) keeps it: the frame's would cover it for
+            // good, and the 3D phone would paint it out.
+            let ownIsland = await hasOwnIsland(asset, duration: duration, layout: layout)
+            cutout = ownIsland ? nil : layout.cutoutRect
+            guard let compositor = DeviceCompositor.shared,
+                  let textures = try? compositor.textures(for: frame, withoutCutout: ownIsland) else { throw Failure.noFrame }
+            self.textures = textures
+            guard let renderer = DeviceSurfaceRenderer(compositor: compositor, size: layout.canvas) else { throw Failure.noFrame }
+            self.renderer = renderer
+        }
+
+        func write(to url: URL, progress: @escaping @Sendable (Double) -> Void) async throws {
+            let (renderer, textures, layout) = (renderer, textures, layout)
+            try await bake(asset, track: track, duration: duration, into: url,
+                           draw: { renderer.renderNow(screen: $0, frame: textures, layout: layout) }, size: renderer.size,
+                           progress: progress)
+        }
+    }
+
+    /// Whether the recording shows an island of its own where the frame draws one, going by a few frames through it.
+    static func hasOwnIsland(_ asset: AVURLAsset, duration: Double, layout: DeviceLayout) async -> Bool {
+        guard layout.cutoutRect != nil, duration > 0 else { return false }
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.requestedTimeToleranceBefore = .positiveInfinity
+        generator.requestedTimeToleranceAfter = .positiveInfinity
+        var votes: [Bool] = []
+        for k in 0 ..< 5 {
+            let t = CMTime(seconds: duration * (Double(k) + 0.5) / 5, preferredTimescale: 600)
+            guard let image = try? await generator.image(at: t).image, let vote = showsIsland(image, layout: layout) else { continue }
+            votes.append(vote)
+        }
+        return votes.filter { $0 }.count * 2 > votes.count
+    }
+
+    /// One frame's say: dark in the middle of where the frame's island goes, with a lighter status bar either side.
+    /// Nil when it can't tell (a dark status bar, or something across it).
+    static func showsIsland(_ image: CGImage, layout: DeviceLayout) -> Bool? {
+        guard let c = layout.cutoutRect, let stream = layout.streamSize, stream.width > 0, stream.height > 0 else { return nil }
+        let k = CGSize(width: CGFloat(image.width) / stream.width, height: CGFloat(image.height) / stream.height)
+        // A patch of the canvas (fractions) in the image's pixels, top-left origin.
+        func brightness(around p: CGPoint, _ w: CGFloat, _ h: CGFloat) -> Double? {
+            guard let a = layout.streamPixel(canvas: CGPoint(x: p.x - w / 2, y: p.y - h / 2)),
+                  let b = layout.streamPixel(canvas: CGPoint(x: p.x + w / 2, y: p.y + h / 2)) else { return nil }
+            let r = CGRect(x: min(a.x, b.x) * k.width, y: min(a.y, b.y) * k.height,
+                           width: abs(b.x - a.x) * k.width, height: abs(b.y - a.y) * k.height).integral
+            return meanBrightness(image, in: r)
+        }
+        // Lengthwise along the island, whichever way the phone is held; one island-height out either side.
+        let across = c.width >= c.height
+        let reach = across ? c.height : c.width
+        let side = reach * 0.4
+        let offset = across ? CGPoint(x: c.width / 2 + reach, y: 0) : CGPoint(x: 0, y: c.height / 2 + reach)
+        let mid = CGPoint(x: c.midX, y: c.midY)
+        guard let centre = brightness(around: mid, c.width * 0.4, c.height * 0.4),
+              let before = brightness(around: CGPoint(x: mid.x - offset.x, y: mid.y - offset.y), side, side),
+              let after = brightness(around: CGPoint(x: mid.x + offset.x, y: mid.y + offset.y), side, side),
+              before > 0.3, after > 0.3 else { return nil }
+        return centre < 0.12
+    }
+
+    /// Average brightness of `rect` (pixels, top-left origin) of `image`, 0 to 1.
+    private static func meanBrightness(_ image: CGImage, in rect: CGRect) -> Double? {
+        let r = rect.intersection(CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        guard r.width >= 1, r.height >= 1, let crop = image.cropping(to: r) else { return nil }
+        let w = crop.width, h = crop.height
+        var data = [UInt8](repeating: 0, count: w * h * 4)
+        let drawn = data.withUnsafeMutableBytes { buffer -> Bool in
+            guard let ctx = CGContext(data: buffer.baseAddress, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                      space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                      bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return false }
+            ctx.draw(crop, in: CGRect(x: 0, y: 0, width: w, height: h))
+            return true
+        }
+        guard drawn else { return nil }
+        var sum = 0.0
+        for i in 0 ..< w * h { sum += 0.2126 * Double(data[i * 4]) + 0.7152 * Double(data[i * 4 + 1]) + 0.0722 * Double(data[i * 4 + 2]) }
+        return sum / Double(w * h) / 255
     }
 
     /// Reads every frame of `track`, draws it, and writes the result with its see-through surround, at the times the
