@@ -98,8 +98,11 @@ final class RecordingController: ObservableObject {
                         window.orderOut(nil)
                     }
                 }
+                // The bubble may be up already from setting up, on the preview's camera: it moves to the recorder's.
                 if settings.showCamera, let session = recorder.captureSession, recorder.hasCameraOutput {
                     CameraBubble.shared.show(session: session)
+                } else {
+                    CameraBubble.shared.hide()
                 }
                 for n in stride(from: 3, through: 1, by: -1) {
                     phase = .countdown(n)
