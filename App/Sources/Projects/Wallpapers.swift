@@ -16,12 +16,19 @@ enum Wallpapers {
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
     }()
 
+    /// A new project on a random wallpaper, exporting as the last export did.
     static func newProject(name: String) throws -> (ProjectBundle, Project) {
         var (bundle, project) = try ProjectBundle.create(name: name)
+        var changed = false
         if let url = bundled.randomElement(), let image = try? bundle.importBackground(from: url) {
             project.style.backgroundImage = image
-            try bundle.save(project)
+            changed = true
         }
+        if let export = ExportDefaults.last {
+            project.export = export
+            changed = true
+        }
+        if changed { try bundle.save(project) }
         return (bundle, project)
     }
 }
