@@ -108,9 +108,20 @@ struct CursorArtwork {
     static let dot: CursorArtwork = {
         let r: CGFloat = 8
         let circle = CGRect(x: -r, y: -r, width: 2 * r, height: 2 * r)
-        return CursorArtwork(bounds: circle.insetBy(dx: -1, dy: -1)) { ctx, _ in
-            ctx.setFillColor(CGColor(gray: 1, alpha: 0.5))
-            ctx.fillEllipse(in: circle)
+        // A frosted disc rather than a solid one: a faint body, brighter towards the top-left, that fades out at its
+        // edge instead of ending on a hard line.
+        let body = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
+                              colors: [CGColor(gray: 1, alpha: 0.4), CGColor(gray: 1, alpha: 0.24),
+                                       CGColor(gray: 1, alpha: 0)] as CFArray,
+                              locations: [0, 0.75, 1])!
+        return CursorArtwork(bounds: circle.insetBy(dx: -4, dy: -4).offsetBy(dx: 0, dy: 1)) { ctx, scale in
+            ctx.saveGState()
+            ctx.setShadow(offset: CGSize(width: 0, height: -0.6 * scale), blur: 3 * scale, color: CGColor(gray: 0, alpha: 0.08))
+            ctx.beginTransparencyLayer(auxiliaryInfo: nil)
+            ctx.drawRadialGradient(body, startCenter: CGPoint(x: -0.25 * r, y: -0.25 * r), startRadius: 0,
+                                   endCenter: .zero, endRadius: r, options: [])
+            ctx.endTransparencyLayer()
+            ctx.restoreGState()
         }
     }()
 }
