@@ -35,6 +35,16 @@ struct CameraSection: View {
             PanelSlider("Corner radius", value: $editor.project.style.cameraCornerRadius, in: 0 ... 0.5,
                         default: FrameStyle().cameraCornerRadius) { percent($0, of: 0 ... 0.5) }
         }
+        PanelDivider()
+        PanelSection("Filter", trailing: AnyView(
+            Text(editor.project.style.cameraFilter.label)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .contentTransition(.opacity)
+                .animation(.snappy, value: editor.project.style.cameraFilter)
+        )) {
+            CameraFilterPicker(filter: $editor.project.style.cameraFilter)
+        }
         MoreOptions(id: "camera") {
             PanelSlider("Layout change speed", value: $editor.project.style.transitionDuration, in: 0.2 ... 1.5,
                         default: FrameStyle().transitionDuration) { String(format: "%.1fs", $0) }
@@ -57,7 +67,7 @@ struct LayoutPicker: View {
         case .hidden: .hidden
         case .centre: .centre
         case let .corner(c, _, _): .corner(c)
-        case let .split(side): .split(side)
+        case let .split(side, _): .split(side)
         case .fullscreen: .fullscreen
         }
     }
@@ -73,14 +83,17 @@ struct LayoutPicker: View {
     private var shape: CameraShape { if case let .corner(_, s, _) = layout { s } else { .square } }
     private var size: CameraSize { if case let .corner(_, _, z) = layout { z } else { .small } }
     private var coverage: Double { if case let .centre(c) = layout { c } else { 0.6 } }
-    private var side: SplitSide { if case let .split(s) = layout { s } else { .right } }
+    private var side: SplitSide { if case let .split(s, _) = layout { s } else { .right } }
+    private var share: Double? { if case let .split(_, s) = layout { s } else { nil } }
+    /// The camera's part of the split: fitted to the screen, then half, a third and a quarter.
+    private static let shares: [Double?] = [nil, 1 / 2, 1 / 3, 1 / 4]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             SegmentedControl(selection: Binding(get: { style }, set: { next in
                 switch next {
                 case .bubble: layout = .corner(.bottomRight, shape, size)
-                case .split: layout = .split(side)
+                case .split: layout = .split(side, share: share)
                 case .fullscreen: layout = .fullscreen
                 }
             }), options: [.bubble, .split, .fullscreen], title: { s in
@@ -120,15 +133,17 @@ struct LayoutPicker: View {
                         .position(x: w / 2, y: h / 2)
                         .help("Centre, large")
                     case .split:
+                        // 4% margins and gap, the rest shared out as the split is.
+                        let camera = w * 0.88 * (share ?? 0.32), screen = w * 0.88 - camera
                         RoundedRectangle(cornerRadius: 5, style: .continuous)
                             .fill(Color.white.opacity(0.06))
-                            .frame(width: w * 0.58, height: h * 0.84)
-                            .position(x: side == .left ? w * 0.65 : w * 0.35, y: h / 2)
+                            .frame(width: screen, height: h * 0.84)
+                            .position(x: side == .left ? w * 0.96 - screen / 2 : w * 0.04 + screen / 2, y: h / 2)
                         ForEach(SplitSide.allCases, id: \.self) { s in
-                            ZoneButton(selected: position == .split(s), width: w * 0.28, height: h * 0.84) {
-                                layout = .split(s)
+                            ZoneButton(selected: position == .split(s), width: camera, height: h * 0.84) {
+                                layout = .split(s, share: share)
                             }
-                            .position(x: s == .left ? w * 0.18 : w * 0.82, y: h / 2)
+                            .position(x: s == .left ? w * 0.04 + camera / 2 : w * 0.96 - camera / 2, y: h / 2)
                             .opacity(position == .split(s) ? 1 : 0.7)
                             .help(s == .left ? "Camera on the left" : "Camera on the right")
                         }
@@ -163,8 +178,15 @@ struct LayoutPicker: View {
                 PanelSlider("Size", value: Binding(get: { coverage }, set: { layout = .centre(coverage: $0) }), in: 0.3 ... 1) {
                     "\(Int($0 * 100))% of width"
                 }
-            case .split:
-                PanelNote("The screen moves aside to share the frame. In a tall video the camera goes above or below it.")
+            case let .split(s):
+                SegmentedControl(selection: Binding(get: { share }, set: { layout = .split(s, share: $0) }),
+                                 options: Self.shares, title: { share in
+                                     share.map { "\(Int((100 * (1 - $0)).rounded())) / \(Int((100 * $0).rounded()))" } ?? "Auto"
+                                 })
+                    .help("How the frame is shared between the screen and the camera")
+                PanelNote(share == nil
+                    ? "The screen moves aside to share the frame. In a tall video the camera goes above or below it."
+                    : "Screen / camera. The two stay this size whatever the screen's shape, with all of the screen showing.")
             case .fullscreen:
                 PanelNote("The camera fills the whole frame, over the screen.")
             case .hidden:
