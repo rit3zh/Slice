@@ -163,6 +163,10 @@ extension EditorModel {
     var hasClicks: Bool { !cursorTrack.clicks.isEmpty }
     var hasPointerLog: Bool { project.clips.contains { cursorLogs[$0.id] != nil } }
     var hasKeystrokes: Bool { !cursorTrack.keys.isEmpty }
+    /// Takes recorded with typed text, which can show what was typed.
+    var hasTypedKeys: Bool { cursorTrack.keys.contains(where: \.isTyped) }
+    /// Every word typed in the takes, for choosing which to hide.
+    var typedWords: [String] { KeystrokeTimeline.typedWords(in: cursorTrack.keys, hold: project.keystrokes.hold) }
     var hasKeyHits: Bool { !cursorTrack.keyHits.isEmpty }
 
     // MARK: - Sections
