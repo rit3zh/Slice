@@ -40,6 +40,12 @@ export const COMPONENTS: Component[] = [
 		url: "https://github.com/sparkle-project/Sparkle",
 	},
 	{
+		name: "Safari mockup",
+		use: "The browser window drawn around screen recordings, after the Safari component in Magic UI",
+		license: "MIT License",
+		url: "https://github.com/magicuidesign/magicui",
+	},
+	{
 		name: "3D device models",
 		use: "The iPhones and MacBook in the 3D editor, by the Sketchfab artists named in the credits",
 		license: "CC BY 4.0, except the iPhone 18 Pro Max (Sketchfab Standard)",
