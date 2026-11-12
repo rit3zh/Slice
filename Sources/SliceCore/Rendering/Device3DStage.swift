@@ -34,6 +34,9 @@ final class Device3DStage {
     /// The Dynamic Island's parts, and the patch of display drawn where it was when it's switched off.
     var island: [SCNNode] = []
     let islandPatch: SCNNode?
+    /// Slice's own island, which stands in for the model's when it's resized or moved, and where it sits at rest.
+    let islandPill: SCNNode?
+    let islandPillRest: SIMD3<Float>
     var bodyMaterials: [(material: SCNMaterial, color: (diffuse: SIMD3<Float>?, emission: SIMD3<Float>?))] = []
     /// The pictures on textured body parts, to put back for the model's own finish.
     var texturedDiffuse: [ObjectIdentifier: Any] = [:]
@@ -64,6 +67,8 @@ final class Device3DStage {
         phone = template.root.clone()
         lid = phone.childNode(withName: Device3DTemplate.lidName, recursively: true)
         islandPatch = phone.childNode(withName: Device3DTemplate.islandPatchName, recursively: true)
+        islandPill = phone.childNode(withName: Device3DTemplate.islandPillName, recursively: true)
+        islandPillRest = islandPill?.simdPosition ?? .zero
         phone.enumerateHierarchy { node, _ in
             guard let geometry = node.geometry?.copy() as? SCNGeometry else { return }
             geometry.materials = geometry.materials.map { ($0.copy() as? SCNMaterial) ?? $0 }
@@ -99,8 +104,9 @@ final class Device3DStage {
         }
         phone.childNode(withName: Device3DTemplate.displayName, recursively: true)?.geometry?.materials = [displayMaterial]
         islandPatch?.geometry?.materials = [displayMaterial]
+        phone.childNode(withName: Device3DTemplate.displaySeamName, recursively: true)?.geometry?.materials = [displayMaterial]
         phone.enumerateHierarchy { node, _ in
-            if node.categoryBitMask & Device3DTemplate.islandCategory != 0 { island.append(node) }
+            if node.categoryBitMask & Device3DTemplate.islandCategory != 0, node !== islandPill { island.append(node) }
         }
         scene.rootNode.addChildNode(phone)
 
