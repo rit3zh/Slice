@@ -101,7 +101,7 @@ public struct Project: Codable, Equatable {
     public var hasDeviceRecording: Bool { clips.contains { $0.device != nil } }
 
     /// Whether the project has takes a 3D model of `kind` shows: iPhone takes for a phone, screen recordings for a laptop.
-    public func hasTakes(for kind: Device3DKind) -> Bool { clips.contains { kind == .phone ? $0.device != nil : $0.device == nil } }
+    public func hasTakes(for kind: Device3DKind) -> Bool { clips.contains { kind == .phone ? $0.device != nil && !$0.isAndroid : $0.device == nil } }
 
     /// Whether the chosen 3D model has takes here to show.
     public var shows3D: Bool { device3D.enabled && hasTakes(for: device3D.model.kind) }
@@ -184,9 +184,11 @@ public struct RecordedDevice: Codable, Equatable {
     public var cutout: CGRect?
     /// Asked for at recording time: the editor opens the take on the 3D phone.
     public var opensIn3D: Bool?
+    /// The recording as it came, for a take whose frame can still be changed.
+    public var unframedFile: String?
 
     public init(name: String, identifier: String, frame: String?, color: String?, screen: CGRect? = nil, cutout: CGRect? = nil,
-                opensIn3D: Bool? = nil) {
+                opensIn3D: Bool? = nil, unframedFile: String? = nil) {
         self.name = name
         self.identifier = identifier
         self.frame = frame
@@ -194,5 +196,6 @@ public struct RecordedDevice: Codable, Equatable {
         self.screen = screen
         self.cutout = cutout
         self.opensIn3D = opensIn3D
+        self.unframedFile = unframedFile
     }
 }
