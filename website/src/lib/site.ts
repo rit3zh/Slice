@@ -5,7 +5,7 @@ export const site = {
 	description:
 		"Slice is a free, native Mac screen recorder and editor. Record your screen, camera and microphone, then add auto zooms, smooth cursor, wallpapers, transitions, spotlights and captions, and blur anything private. No account, and nothing leaves your Mac.",
 	author: { name: "rit3zh", url: "https://x.com/rit3zh", handle: "@rit3zh" },
-	version: "0.2.7",
+	version: "0.2.8",
 	repo: "https://github.com/rit3zh/slice",
 	download: "https://github.com/rit3zh/slice/releases/latest",
 	requirement: "macOS 15 or later",
