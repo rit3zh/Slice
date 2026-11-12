@@ -67,10 +67,12 @@ public final class DeviceCompositor: @unchecked Sendable {
 
     // MARK: - Frame images
 
-    public func textures(for definition: DeviceFrameDefinition) throws -> DeviceFrameTextures {
-        let key = definition.cacheKey
+    /// `withoutCutout` leaves the frame's island or notch out, for a recording with its own.
+    public func textures(for definition: DeviceFrameDefinition, withoutCutout: Bool = false) throws -> DeviceFrameTextures {
+        let key = definition.cacheKey + (withoutCutout ? " without cutout" : "")
         if let cached = lock.withLock({ frames[key] }) { return cached }
-        let image = try definition.frameURL.map(DeviceFrameImage.load) ?? .frameless(size: definition.canvasSize)
+        var image = try definition.frameURL.map(DeviceFrameImage.load) ?? .frameless(size: definition.canvasSize)
+        if withoutCutout { image = image.withoutCutout() }
         guard let frame = makeTexture(.bgra8Unorm, image.width, image.height, bytes: image.pixels, bytesPerRow: image.width * 4),
               let mask = makeTexture(.r8Unorm, image.width, image.height, bytes: image.mask, bytesPerRow: image.width)
         else { throw DeviceFrameImage.LoadError.unreadable(definition.frameURL ?? URL(fileURLWithPath: "/")) }
