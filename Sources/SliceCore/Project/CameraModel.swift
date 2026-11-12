@@ -24,7 +24,8 @@ public enum CameraLayout: Codable, Equatable, Hashable {
     case corner(Corner, CameraShape, CameraSize)
     case centre(coverage: Double)
     case fullscreen
-    case split(SplitSide)
+    /// `share` is the camera's part of the frame's width (height in a tall video); nil sizes the two to fit the screen.
+    case split(SplitSide, share: Double? = nil)
 }
 
 public enum SplitSide: String, Codable, CaseIterable {
