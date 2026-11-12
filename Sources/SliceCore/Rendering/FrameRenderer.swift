@@ -108,7 +108,7 @@ public final class FrameRenderer: @unchecked Sendable {
                 var screenRect = flip(viewed(g.contentRect, view: views[0], output: out), height: out.height)
                     .intersection(extent)
                 var screenRadius = g.shapedByAlpha ? 0
-                    : style.effectiveScreenCornerRadius * min(out.width, out.height) * out.width / views[0].width
+                    : contentRadius(geometry: g, style: style, output: out) * out.width / views[0].width
                 var center = magnified.center
                 if let placement {
                     screenRect = placement.rect
@@ -145,6 +145,11 @@ public final class FrameRenderer: @unchecked Sendable {
     let lensShadows = NSCache<NSString, CIImage>()
     let captionLayouts = NSCache<NSString, CaptionLayout>()
     let keycapCache = NSCache<NSString, CIImage>()
+    let mockupToolbars: NSCache<NSString, CIImage> = {
+        let cache = NSCache<NSString, CIImage>()
+        cache.countLimit = 6
+        return cache
+    }()
     let annotationMarks = AnnotationMarkCache()
     let backgroundBlurs: NSCache<NSString, CIImage> = {
         let cache = NSCache<NSString, CIImage>()
