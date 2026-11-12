@@ -117,6 +117,29 @@ public struct DeviceFrameImage {
                                 screen: DeviceScreenGeometry(x: 0, y: 0, width: 1, height: 1, cornerRadius: 0))
     }
 
+    /// The frame with its island or notch taken out, the display showing through where it was: for a recording that
+    /// has its own there. A little beyond it too, for its soft edge; never past the opening into the bezel.
+    public func withoutCutout() -> DeviceFrameImage {
+        guard let c = screen.cutout else { return self }
+        let fw = CGFloat(width), fh = CGFloat(height)
+        let margin = CGFloat(Self.maskGrowth + 2)
+        let opening = CGRect(x: screen.x * fw, y: screen.y * fh, width: screen.width * fw, height: screen.height * fh)
+        let r = CGRect(x: c.minX * fw, y: c.minY * fh, width: c.width * fw, height: c.height * fh)
+            .insetBy(dx: -margin, dy: -margin).intersection(opening).integral
+        guard !r.isEmpty else { return self }
+        var pixels = self.pixels, mask = self.mask
+        for y in Int(r.minY) ..< min(Int(r.maxY), height) {
+            for x in Int(r.minX) ..< min(Int(r.maxX), width) {
+                let i = y * width + x
+                pixels.replaceSubrange(i * 4 ..< i * 4 + 4, with: [0, 0, 0, 0])
+                mask[i] = 255
+            }
+        }
+        var open = screen
+        open.cutout = nil
+        return DeviceFrameImage(width: width, height: height, pixels: pixels, mask: mask, screen: open)
+    }
+
     /// Frame drawn inside the opening near its top, away from the rounded corners: the island or notch.
     private static func cutout(in region: [UInt8], w: Int, bounds: CGRect) -> CGRect? {
         let x0 = Int(bounds.minX + bounds.width * 0.2), x1 = Int(bounds.maxX - bounds.width * 0.2)
@@ -226,7 +249,7 @@ public final class DeviceFrameCatalog: @unchecked Sendable {
 
     public var models: [String] { frames.keys.sorted() }
 
-    static let standInAspectTolerance: CGFloat = 0.02
+    public static let standInAspectTolerance: CGFloat = 0.02
 
     public func colors(for model: String) -> [DeviceColor] { (frames[model] ?? [:]).keys.sorted() }
 
@@ -240,7 +263,7 @@ public final class DeviceFrameCatalog: @unchecked Sendable {
         return definition
     }
 
-    public func frame(for device: DeviceModel) -> (model: String, exact: Bool)? {
+    public func frame(for device: DeviceModel, aspectTolerance: CGFloat = standInAspectTolerance) -> (model: String, exact: Bool)? {
         if frames[device.frameName] != nil { return (device.frameName, true) }
         let target = device.screenPixels
         guard target.width > 0, target.height > 0 else { return models.first.map { ($0, false) } }
@@ -254,7 +277,7 @@ public final class DeviceFrameCatalog: @unchecked Sendable {
             return aspect * 10 + scale
         }
         guard let best = candidates.min(by: { cost($0.1) < cost($1.1) }),
-              abs(log((best.1.width / best.1.height) / (target.width / target.height))) < Self.standInAspectTolerance
+              abs(log((best.1.width / best.1.height) / (target.width / target.height))) < aspectTolerance
         else { return nil }
         return (best.0, false)
     }
