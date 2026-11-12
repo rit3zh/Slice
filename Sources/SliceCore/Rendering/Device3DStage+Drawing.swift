@@ -64,8 +64,20 @@ extension Device3DStage {
 
     /// Finish and lights.
     func dress(_ settings: Device3DSettings) {
-        for node in island { node.isHidden = !settings.dynamicIsland }
-        islandPatch?.isHidden = settings.dynamicIsland
+        // Resized or moved, the island is Slice's pill over the patch, wherever the model's own was cut out.
+        let sizes = Device3DSettings.islandSizeRange, offsets = Device3DSettings.islandOffsetRange
+        let size = Float(min(max(settings.islandSize, sizes.lowerBound), sizes.upperBound))
+        let offset = Float(min(max(settings.islandOffset, offsets.lowerBound), offsets.upperBound))
+        let custom = abs(size - 1) > 0.001 || abs(offset) > 0.001
+        for node in island { node.isHidden = !settings.dynamicIsland || custom }
+        islandPatch?.isHidden = settings.dynamicIsland && !custom
+        if let pill = islandPill {
+            pill.isHidden = !settings.dynamicIsland || !(custom || model.drawsIsland)
+            // Moved by its own height: positive is further down the display.
+            let height = pill.boundingBox.max.y - pill.boundingBox.min.y
+            pill.simdScale = SIMD3(size, size, 1)
+            pill.simdPosition = islandPillRest - SIMD3(0, offset * Float(height), 0)
+        }
         if finish != settings.finish {
             finish = settings.finish
             let native = model.finishes.first == settings.finish
