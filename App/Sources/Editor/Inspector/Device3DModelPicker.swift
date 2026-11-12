@@ -23,6 +23,15 @@ struct ModelPicker: View {
             finishes
             if s.model.kind == .phone {
                 PanelToggle("Dynamic Island", isOn: Binding(get: { s.dynamicIsland }, set: { editor.project.device3D.dynamicIsland = $0 }))
+                if s.dynamicIsland {
+                    // For lining it up over an island that's in the recording itself.
+                    PanelSlider("Island size", value: Binding(get: { s.islandSize }, set: { editor.project.device3D.islandSize = $0 }),
+                                in: Device3DSettings.islandSizeRange, default: 1) { "\(Int(($0 * 100).rounded()))%" }
+                    PanelSlider("Island position", value: Binding(get: { s.islandOffset }, set: { editor.project.device3D.islandOffset = $0 }),
+                                in: Device3DSettings.islandOffsetRange, default: 0) { v in
+                        abs(v) < 0.01 ? "Default" : "\(v < 0 ? "Up" : "Down") \(Int((abs(v) * 100).rounded()))%"
+                    }
+                }
             }
         }
     }
