@@ -30,6 +30,26 @@ final class SceneTests: XCTestCase {
         }
     }
 
+    func testSplitSharesKeepTheirRatioAndTheWholeScreen() {
+        for aspect in OutputAspect.allCases {
+            let size = aspect.size(shortSide: 1080), wide = size.width >= size.height
+            for side in SplitSide.allCases { for share in [0.5, 1.0 / 3, 0.25] {
+                let st = CameraLayoutResolver.state(for: .split(side, share: share), output: size, style: FrameStyle(),
+                                                    contentAspect: 16 / 10)
+                let screen = ScreenSlot.rect(st.screenSlot, in: size)
+                let camera = wide ? st.rect.width : st.rect.height, rest = wide ? screen.width : screen.height
+                XCTAssertEqual(camera / (camera + rest), share, accuracy: 0.001, "\(aspect) \(side) \(share)")
+                XCTAssertEqual(screen.width / screen.height, 16 / 10, accuracy: 0.001, "\(aspect) \(side) \(share)")
+                XCTAssertTrue(CGRect(origin: .zero, size: size).insetBy(dx: -0.5, dy: -0.5).contains(st.rect.union(screen)))
+            } }
+        }
+    }
+
+    func testSplitFromBeforeSharesStillOpens() throws {
+        let old = try JSONDecoder().decode(CameraLayout.self, from: Data(#"{"split": {"_0": "left"}}"#.utf8))
+        XCTAssertEqual(old, .split(.left))
+    }
+
     func testCameraTransitionIsContinuousAndSettles() {
         var p = project()
         p.defaultCamera = .corner(.bottomRight, .square, .small)
