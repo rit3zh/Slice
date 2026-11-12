@@ -29,14 +29,14 @@ export default function ReleaseChip() {
 	return (
 		<Beam>
 			<Link
-				href="/blog/slice-0-2-7"
+				href="/blog/slice-0-2-8"
 				className="group/chip inline-flex h-9 items-center gap-1.5 rounded-full bg-raised px-4 text-[13.5px] font-medium text-fg inset-ring inset-ring-line transition-colors duration-200 ease-quart hover:bg-surface"
 			>
 				<span className="text-muted">v{site.version}</span>
 				<span className="text-faint" aria-hidden>
 					·
 				</span>
-				Now with iPhone 18 Pro Max mockups
+				Now with Safari and Android mockups
 				<svg
 					width="10"
 					height="10"
