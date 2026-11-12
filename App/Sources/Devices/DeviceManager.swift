@@ -79,6 +79,8 @@ final class DeviceManager: ObservableObject {
     @Published private(set) var connections: [DeviceConnection] = []
 
     let catalog: DeviceFrameCatalog
+    /// Kept apart from the iPhone frames, which connected iPhones choose among.
+    let androidCatalog: DeviceFrameCatalog
     private var listener: Usbmux.Listener?
     private var observers: [NSObjectProtocol] = []
     private var forwarding: [String: AnyCancellable] = [:]
@@ -88,6 +90,7 @@ final class DeviceManager: ObservableObject {
     private init() {
         let dir = Bundle.main.url(forResource: "DeviceFrames", withExtension: nil) ?? Bundle.main.bundleURL
         catalog = DeviceFrameCatalog(directory: dir)
+        androidCatalog = DeviceFrameCatalog(directory: Bundle.main.url(forResource: "AndroidFrames", withExtension: nil) ?? Bundle.main.bundleURL)
     }
 
     var devices: [ConnectedDevice] { connections.map(\.info) }
