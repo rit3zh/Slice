@@ -91,19 +91,24 @@ extension CaptureBar {
             }
             VStack(alignment: .leading, spacing: 8) {
                 SectionTitle("Camera")
-                Toggle("Show camera while recording", isOn: $showCamera)
+                OptionToggle("Show camera bubble", isOn: $showCamera)
                     .disabled(cameraName == nil)
                     .help(cameraName == nil ? "Pick a camera first"
-                        : "A bubble you can drag anywhere and double-click to resize. It's left out of the recording.")
+                        : "Shows you on screen as you set up and while you record. Drag it anywhere and double-click to resize. It's left out of the recording.")
             }
             .toggleStyle(.switch)
             .controlSize(.small)
             VStack(alignment: .leading, spacing: 8) {
                 SectionTitle("Audio & keys")
-                Toggle(kind != .device ? "Record sound from apps" : "Record the iPhone's sound", isOn: $screenAudio)
+                OptionToggle(kind != .device ? "Record sound from apps" : "Record the iPhone's sound", isOn: $screenAudio)
                 if kind != .device {
-                    Toggle("Record keyboard", isOn: $keys)
+                    OptionToggle("Record keyboard", isOn: $keys.animation(.snappy))
                         .help("For showing the shortcuts you press over the video, and for typing sounds. Shortcuts (⌘, ⌃ or ⌥ with a key) and keys like esc and the arrows are recorded; for typing, only when a key went down, never which one.")
+                    if keys {
+                        OptionToggle("Include typed text", isOn: $typing, nested: true)
+                            .transition(.opacity)
+                            .help("Also records the letters you type, so the video can show them as you type. Password fields are never recorded.")
+                    }
                     if keys && !keysAllowed {
                         HStack(spacing: 8) {
                             Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
@@ -146,5 +151,36 @@ extension CaptureBar {
 
     func shown(_ p: Picker) -> Binding<Bool> {
         Binding(get: { picker == p }, set: { if !$0, picker == p { picker = nil } })
+    }
+}
+
+/// A setting in the options: its name on the left, the switch lined up with the others on the right. A nested one
+/// belongs to the setting above it.
+private struct OptionToggle: View {
+    let title: String
+    @Binding var isOn: Bool
+    var nested = false
+
+    init(_ title: String, isOn: Binding<Bool>, nested: Bool = false) {
+        self.title = title
+        _isOn = isOn
+        self.nested = nested
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if nested {
+                Image(systemName: "arrow.turn.down.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            Text(title).foregroundStyle(nested ? .secondary : .primary)
+            Spacer(minLength: 12)
+            Toggle(title, isOn: $isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+        }
+        .padding(.leading, nested ? 4 : 0)
     }
 }
