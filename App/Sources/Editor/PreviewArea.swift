@@ -61,6 +61,8 @@ struct PreviewHeader: View {
     /// A recording far from the frame's shape, which is either cropped to fill it or fitted whole.
     private var canFit: Bool {
         let p = editor.project
+        // A mockup always shows the whole recording.
+        guard p.style.mockup.kind == .none else { return false }
         return p.clips.contains { clip in
             clip.device == nil
                 && ScreenGeometry(contentSize: clip.screenPixelSize, output: p.renderSize, style: p.style).isMismatched
