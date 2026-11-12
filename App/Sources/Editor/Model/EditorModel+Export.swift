@@ -10,11 +10,11 @@ import SliceCore
 import SwiftUI
 
 extension EditorModel {
-    func importClips(_ urls: [URL]) async {
+    func importClips(_ urls: [URL], onto3D: Bool = false) async {
         var added: [Clip] = []
         for url in urls {
             do {
-                added.append(try await importTake(url))
+                added.append(try await importTake(url, onto3D: onto3D))
             } catch {
                 transcribeError = "Couldn't import \(url.lastPathComponent): \(error.localizedDescription)"
             }
@@ -88,6 +88,7 @@ extension EditorModel {
 
     private func startExport(_ items: [(url: URL, aspect: OutputAspect)]) {
         guard exportJob?.isRunning != true, let first = items.first else { return }
+        ExportDefaults.remember(project.export)
         pause()
         let p = exporting(first.aspect), settings = p.export
         let job = ExportJob(url: first.url, format: settings.format, size: p.exportSize, fps: settings.outputFPS, hevc: settings.hevc,
