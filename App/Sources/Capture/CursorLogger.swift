@@ -7,6 +7,7 @@
 
 import AppKit
 import AVFoundation
+import Carbon.HIToolbox
 import SliceCore
 import VideoToolbox
 
@@ -50,10 +51,13 @@ final class CursorLogger {
     private var analysis: LiveTakeAnalyzer?
     /// Keys that aren't part of what's recorded, such as Slice's own shortcuts.
     var ignoresKey: ((NSEvent) -> Bool)?
+    /// Typed characters are kept too, to show what was typed; asked for at recording time, off unless it is.
+    private var keepsTyping = false
 
-    func start(globalRect: CGRect, mapping: Mapping? = nil, keys: Bool = false, deviceWindowsInPicture: Bool = false,
-               analysis: LiveTakeAnalyzer? = nil) {
+    func start(globalRect: CGRect, mapping: Mapping? = nil, keys: Bool = false, typing: Bool = false,
+               deviceWindowsInPicture: Bool = false, analysis: LiveTakeAnalyzer? = nil) {
         map = mapping ?? Self.mapping(globalRect)
+        keepsTyping = keys && typing
         result = Result()
         self.analysis = analysis
         self.deviceWindowsInPicture = deviceWindowsInPicture
@@ -170,13 +174,16 @@ final class CursorLogger {
         guard !event.isARepeat, ignoresKey?(event) != true else { return }
         result.hits.append(KeyHit(t: t, kind: KeyHit.kind(keyCode: event.keyCode)))
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        // Never what goes into a password field: macOS turns secure input on for those.
+        let text = keepsTyping && !IsSecureEventInputEnabled() ? event.characters : nil
         guard let press = KeyPress.make(t: t, keyCode: event.keyCode,
                                         characters: event.characters(byApplyingModifiers: []) ?? event.charactersIgnoringModifiers,
-                                        control: flags.contains(.control), option: flags.contains(.option),
+                                        text: text, control: flags.contains(.control), option: flags.contains(.option),
                                         shift: flags.contains(.shift), command: flags.contains(.command)) else {
             result.typing.append(t)
             return
         }
+        if press.isTyped { result.typing.append(t) }
         result.keys.append(press)
     }
 
