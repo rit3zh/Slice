@@ -113,14 +113,16 @@ public enum CameraLayoutResolver {
             rect = CGRect(x: (output.width - w) / 2, y: (output.height - h) / 2, width: w, height: h)
         case .fullscreen:
             return CameraState(rect: CGRect(origin: .zero, size: output), cornerRadius: 0, opacity: 1, zoomFollow: 0)
-        case let .split(side):
-            return split(side, output: output, style: style, contentAspect: contentAspect ?? 16 / 10)
+        case let .split(side, share):
+            return split(side, share: share, output: output, style: style, contentAspect: contentAspect ?? 16 / 10)
         }
         let radius = min(rect.width, rect.height) * style.cameraCornerRadius
         return CameraState(rect: rect, cornerRadius: radius, opacity: 1)
     }
 
-    private static func split(_ side: SplitSide, output: CGSize, style: FrameStyle, contentAspect: CGFloat) -> CameraState {
+    /// With a `share`, the two sit side by side in that ratio, as large as fits with all of the screen showing.
+    private static func split(_ side: SplitSide, share: Double?, output: CGSize, style: FrameStyle,
+                              contentAspect: CGFloat) -> CameraState {
         let base = min(output.width, output.height)
         let margin = base * max(style.effectivePadding, 0.02)
         let avail = CGRect(origin: .zero, size: output).insetBy(dx: margin, dy: margin)
@@ -130,12 +132,18 @@ public enum CameraLayoutResolver {
         if output.width >= output.height {
             var height = avail.height
             var cameraWidth = avail.width - height * aspect
-            let least = avail.width * 0.26, most = min(avail.width * 0.45, height * 0.9)
-            if cameraWidth < least {
-                cameraWidth = least
-                height = (avail.width - least) / aspect
+            if let share = share.map({ CGFloat(min(max($0, 0.1), 0.9)) }) {
+                let total = min(avail.width, height * aspect / (1 - share))
+                cameraWidth = total * share
+                height = (total - cameraWidth) / aspect
+            } else {
+                let least = avail.width * 0.26, most = min(avail.width * 0.45, height * 0.9)
+                if cameraWidth < least {
+                    cameraWidth = least
+                    height = (avail.width - least) / aspect
+                }
+                cameraWidth = min(cameraWidth, most)
             }
-            cameraWidth = min(cameraWidth, most)
             let screenWidth = height * aspect
             let x = avail.minX + (avail.width - screenWidth - cameraWidth) / 2, y = avail.minY + (avail.height - height) / 2
             camera = CGRect(x: first ? x : x + screenWidth, y: y, width: cameraWidth, height: height)
@@ -143,12 +151,18 @@ public enum CameraLayoutResolver {
         } else {
             var width = avail.width
             var cameraHeight = avail.height - width / aspect
-            let least = avail.height * 0.3, most = min(avail.height * 0.55, width * 1.1)
-            if cameraHeight < least {
-                cameraHeight = least
-                width = (avail.height - least) * aspect
+            if let share = share.map({ CGFloat(min(max($0, 0.1), 0.9)) }) {
+                let total = min(avail.height, width / aspect / (1 - share))
+                cameraHeight = total * share
+                width = (total - cameraHeight) * aspect
+            } else {
+                let least = avail.height * 0.3, most = min(avail.height * 0.55, width * 1.1)
+                if cameraHeight < least {
+                    cameraHeight = least
+                    width = (avail.height - least) * aspect
+                }
+                cameraHeight = min(cameraHeight, most)
             }
-            cameraHeight = min(cameraHeight, most)
             let screenHeight = width / aspect
             let x = avail.minX + (avail.width - width) / 2, y = avail.minY + (avail.height - screenHeight - cameraHeight) / 2
             camera = CGRect(x: x, y: first ? y : y + screenHeight, width: width, height: cameraHeight)
@@ -172,6 +186,10 @@ public struct ScreenGeometry: Equatable {
     public var fullBleedSize: CGSize
     public var followsCursor: Bool
     public var shapedByAlpha = false
+    /// The browser or phone drawn around the recording; never around a framed device, which has its own.
+    public var mockup: ScreenMockup?
+    /// The recording and its mockup together: `contentRect` without one.
+    public var frameRect: CGRect
 
     public init(contentSize: CGSize, output: CGSize, style: FrameStyle, shapedByAlpha: Bool = false) {
         self.output = output
@@ -180,21 +198,30 @@ public struct ScreenGeometry: Equatable {
         let inset = base * style.effectivePadding
         let avail = CGSize(width: max(output.width - 2 * inset, 1), height: max(output.height - 2 * inset, 1))
         let c = contentSize.width > 0 && contentSize.height > 0 ? contentSize : output
-        let scale = min(avail.width / c.width, avail.height / c.height)
+        let mockup = shapedByAlpha || style.mockup.kind == .none ? nil : style.mockup
+        self.mockup = mockup
+        // The mockup grows with the recording, so the two are fitted together.
+        let m = mockup?.insets(for: c) ?? .zero
+        let outer = CGSize(width: c.width + m.left + m.right, height: c.height + m.top + m.bottom)
+        let scale = min(avail.width / outer.width, avail.height / outer.height)
         let size = CGSize(width: c.width * scale, height: c.height * scale)
-        contentRect = CGRect(x: (output.width - size.width) / 2, y: (output.height - size.height) / 2,
+        frameRect = CGRect(x: (output.width - outer.width * scale) / 2, y: (output.height - outer.height * scale) / 2,
+                           width: outer.width * scale, height: outer.height * scale)
+        contentRect = CGRect(x: frameRect.minX + m.left * scale, y: frameRect.minY + m.top * scale,
                              width: size.width, height: size.height)
         let outAspect = output.width / output.height
         let contentAspect = size.width / size.height
         fullBleedSize = contentAspect > outAspect
             ? CGSize(width: size.height * outAspect, height: size.height)
             : CGSize(width: size.width, height: size.width / outAspect)
-        let mismatch = max(contentAspect / outAspect, outAspect / contentAspect)
+        let framedAspect = frameRect.width / frameRect.height
+        let mismatch = max(framedAspect / outAspect, outAspect / framedAspect)
         isMismatched = mismatch > Self.mismatchLimit
         followsCursor = isMismatched
         // A framed device sits whole on the canvas at any aspect, as the 3D phone does: never cropped to fill. A screen
-        // fitted whole does the same, so zooms are measured from all of it.
-        if shapedByAlpha || (isMismatched && style.fitsScreen) {
+        // fitted whole does the same, so zooms are measured from all of it; so does one in a mockup, which cropping
+        // would cut away.
+        if shapedByAlpha || (isMismatched && (style.fitsScreen || mockup != nil)) {
             fullBleedSize = output
             followsCursor = false
         }
