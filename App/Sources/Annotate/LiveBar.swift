@@ -16,6 +16,7 @@ struct LiveBar: View {
     let session: AnnotationSession?
 
     static let pad: CGFloat = 12
+    static let grip: CGFloat = 18
     static let finish: CGFloat = 104
     static let icon: CGFloat = 40
     static let round: CGFloat = 44
@@ -28,7 +29,7 @@ struct LiveBar: View {
     /// and the tools fading in all move as one.
     static let expand = Animation.spring(duration: 0.46, bounce: 0)
 
-    static var plainWidth: CGFloat { pad * 2 + finish + divider + icon * 3 }
+    static var plainWidth: CGFloat { pad * 1.5 + grip + finish + divider + icon * 3 }
     static var liveWidth: CGFloat { plainWidth + divider + icon }
     static var drawingWidth: CGFloat {
         let tools = CGFloat(Annotation.Tool.allCases.count) * item
@@ -40,6 +41,7 @@ struct LiveBar: View {
     var body: some View {
         let paused = recording.phase == .paused
         HStack(spacing: 0) {
+            BarGrip()
             FinishButton(elapsed: recording.elapsed, paused: paused) { recording.stop() }
             ToolDivider()
             PauseButton(paused: paused) { recording.togglePause() }
@@ -54,8 +56,11 @@ struct LiveBar: View {
                 }
             }
         }
-        .padding(.horizontal, Self.pad)
+        .padding(.leading, Self.pad / 2)
+        .padding(.trailing, Self.pad)
         .frame(height: 72)
+        // Anywhere that isn't a button moves the bar, so it can be taken out of the way mid-recording.
+        .barDragBackground()
         .animation(Self.expand, value: drawing)
     }
 }
