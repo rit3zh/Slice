@@ -7,14 +7,13 @@
 
 import SwiftUI
 
-/// The preview header's note while a phone's screen recording is put into its frame.
 struct DeviceImportStatus: View {
     let progress: Double
 
     var body: some View {
         HStack(spacing: 7) {
             ProgressView(value: progress).progressViewStyle(.circular).controlSize(.mini)
-            Text("Putting it on the iPhone… \(Int((progress * 100).rounded()))%")
+            Text("Putting it in its frame… \(Int((progress * 100).rounded()))%")
                 .font(.system(size: 12).monospacedDigit())
                 .contentTransition(.numericText(value: progress))
         }
