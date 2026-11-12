@@ -110,9 +110,12 @@ extension FrameRenderer {
     }
 
     /// Covers the frame's island or notch with what's either side of it along its length (the status bar's
-    /// background, almost always), so the 3D phone's own island isn't drawn over a second one.
-    private func paintingOut(_ cutout: CGRect, of picture: CIImage) -> CIImage {
-        let r = cutout.insetBy(dx: -3, dy: -3).intersection(picture.extent.insetBy(dx: 1, dy: 1))
+    /// background, almost always), so the 3D phone's own island isn't drawn over a second one. A little beyond it
+    /// too: a Simulator recording has an island of its own under the frame's, not quite the same shape, whose edge
+    /// otherwise peeks out as a dark hairline.
+    func paintingOut(_ cutout: CGRect, of picture: CIImage) -> CIImage {
+        let margin = max(3, (min(cutout.width, cutout.height) * 0.15).rounded(.up))
+        let r = cutout.insetBy(dx: -margin, dy: -margin).intersection(picture.extent.insetBy(dx: 1, dy: 1))
         guard r.width >= 2, r.height >= 2 else { return picture }
         let across = r.width >= r.height
         let before = across ? CGRect(x: r.minX - 1, y: r.minY, width: 1, height: r.height) : CGRect(x: r.minX, y: r.minY - 1, width: r.width, height: 1)
