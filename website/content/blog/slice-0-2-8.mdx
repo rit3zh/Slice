@@ -1,0 +1,68 @@
+---
+title: Now with Safari and Android mockups
+description: Slice 0.2.8 puts your recordings in a Safari window or an Android phone, shows what you type as you type it, adds camera filters, and lets you move the capture bar anywhere.
+date: 2026-11-12T18:00:00Z
+cover: /media/slice-0-2-8.jpg
+---
+
+Slice 0.2.8 is out. Screen recordings can now sit in a Safari window, Android recordings get a phone of their own, and the keystrokes overlay can show everything you type, not just shortcuts.
+
+## Safari mockups
+
+Open the **Frame** tab and pick **Safari** or **Minimal** under **Mockup**. Slice draws a browser window around your recording and sizes it to fit, whatever shape the recording is. Type a web address to show it in the address bar, or leave the bar empty. Turn on **Dark toolbar** if your recording is dark.
+
+The mockup has its own corners and edge, so **Corner radius** and **Border** are greyed out while it's on. Phone recordings keep their own frame, and the mockup hides while the 3D device is showing.
+
+## Android phones
+
+Drop an Android screen recording on the projects window, or add it to a project you're editing, and Slice puts it in a phone. It ships with the **Pixel 8**, **Pixel 8 Pro**, **Pixel 9 Pro**, **Pixel 9 Pro XL** and **Samsung Galaxy S21**, each in its own colours.
+
+Slice picks the phone whose screen is closest to your recording. To pick a different one, open **Android frame** in the **Frame** tab, choose a **Phone**, and click a colour. Your takes switch over straight away. Turn the switch off to show Android recordings with no phone around them.
+
+## Show what you type
+
+The **Keyboard** tab has a new **Keystrokes** section. Choose what to show:
+
+- **Shortcuts** shows key combinations with ⌘, ⌃ or ⌥, as before.
+- **Keys** adds keys like esc, return and the arrows when you press them on their own.
+- **Everything** also shows your typing as a line of text, letter by letter.
+
+To show typing, turn on **Include typed text** under **Record keyboard** in the capture bar's options before you record. Password fields are never recorded. If you typed something you'd rather not show, click the word under **Hide words** and it shows as dots everywhere you typed it.
+
+You can now show one press at a time, or **Stacked**, where each press stays up for its own time and newer ones push older ones up. There are four looks: **Dark**, **Light**, **Keycaps** and **Minimal**.
+
+## Camera filters and split sizes
+
+The **Camera** tab has a row of **Filters**: **Mono**, **Noir**, **Sepia**, **Warm**, **Cool**, **Vivid** and **Fade**. The filter is added when the video is drawn, so your original recording stays as it was.
+
+In **Split** layout, you can choose how much of the frame each side gets: **Auto**, **50 / 50**, **67 / 33** or **75 / 25**. All of your screen stays visible whichever you pick.
+
+## A capture bar you can move
+
+Drag the capture bar from the dots on its left, or from any gap between its buttons, even while you're recording. If you let go with part of it off the screen, it slides back. Double-click the dots to put it back at the top of the screen. While you're recording, clicks on the empty space around the small bar go through to whatever is under it.
+
+If **Show camera bubble** is on, the bubble now appears while you set up too, so you can check how you look before you press Record.
+
+## Smaller things
+
+- On the 3D phone, **Island size** and **Island position** let you line the Dynamic Island up with one that's already in your recording.
+- Recordings you add from the **3D** tab go onto the 3D phone without a flat frame drawn into them.
+- New projects start with the export settings you used last.
+
+## Install or update
+
+If you have 0.2.6 or later, Slice will offer the update itself. Click **Update Now** on the card, or open **Settings › General** and click **Check for Updates**.
+
+Otherwise, run this in Terminal:
+
+```bash
+curl -fsSL https://slice.rit3zh.dev/install.sh | bash
+```
+
+Or [download Slice.dmg](https://github.com/rit3zh/slice/releases/latest) and drag Slice to Applications. If macOS says it can't verify Slice, click **Done**, then go to **System Settings › Privacy & Security** and click **Open Anyway**. You only need to do this once.
+
+Slice needs macOS 15 or later on Apple silicon.
+
+## What's next
+
+The [roadmap](/roadmap) shows what I'm working on next. If something doesn't work the way you expected, [open an issue](https://github.com/rit3zh/slice/issues/new) and tell me. Every report so far has made Slice better.
