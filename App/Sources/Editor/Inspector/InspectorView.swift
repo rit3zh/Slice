@@ -18,7 +18,18 @@ struct InspectorView: View {
                 switch tab {
                 case .cursor: MouseSection(editor: editor)
                 case .keyboard: KeystrokesSection(editor: editor)
-                case .frame: BackgroundSection(editor: editor)
+                case .frame:
+                    // Up top once there's an Android take to act on; out of the way of everyone else.
+                    let hasAndroid = editor.project.clips.contains(where: \.isAndroid)
+                    if hasAndroid {
+                        AndroidFrameSection(editor: editor)
+                        PanelDivider()
+                    }
+                    BackgroundSection(editor: editor)
+                    if !hasAndroid {
+                        PanelDivider()
+                        AndroidFrameSection(editor: editor)
+                    }
                 case .camera: CameraSection(editor: editor)
                 case .audio: AudioPanel(editor: editor)
                 case .output: OutputSection(editor: editor)
