@@ -185,6 +185,10 @@ public struct Device3DSettings: Codable, Equatable {
     public var lid = Device3DPlacement.openLid
     /// Whether a phone shows its Dynamic Island.
     public var dynamicIsland = true
+    /// The island's size against the model's own, and how far it's moved down the display in its own heights: for
+    /// covering an island that's in the recording itself.
+    public var islandSize = 1.0
+    public var islandOffset = 0.0
     /// 0 is a long lens (almost flat), 1 a wide one (strong perspective).
     public var perspective = 0.35
     public var animation = Device3DAnimation()
@@ -204,6 +208,8 @@ public struct Device3DSettings: Codable, Equatable {
 
     public static let scaleRange = 0.15 ... 4.0
     public static let positionRange = -1.0 ... 1.0
+    public static let islandSizeRange = 0.6 ... 1.8
+    public static let islandOffsetRange = -1.0 ... 1.5
     /// Shut to leaning well back, as far as a MacBook's hinge goes.
     public static let lidRange = 0.0 ... 120.0
     static let fieldOfView = 8.0 ... 50.0
@@ -228,6 +234,8 @@ public struct Device3DSettings: Codable, Equatable {
         scale = try c.decodeIfPresent(Double.self, forKey: .scale) ?? d.scale
         lid = try c.decodeIfPresent(Double.self, forKey: .lid) ?? d.lid
         dynamicIsland = try c.decodeIfPresent(Bool.self, forKey: .dynamicIsland) ?? d.dynamicIsland
+        islandSize = try c.decodeIfPresent(Double.self, forKey: .islandSize) ?? d.islandSize
+        islandOffset = try c.decodeIfPresent(Double.self, forKey: .islandOffset) ?? d.islandOffset
         perspective = try c.decodeIfPresent(Double.self, forKey: .perspective) ?? d.perspective
         animation = try c.decodeIfPresent(Device3DAnimation.self, forKey: .animation) ?? d.animation
         background = (try? c.decodeIfPresent(Device3DBackground.self, forKey: .background)) ?? d.background
@@ -243,8 +251,8 @@ public struct Device3DSettings: Codable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case enabled, model, finish, yaw, pitch, rotation, position, scale, lid, dynamicIsland, perspective, animation, background,
-             backgroundColor, brightness, lightAngle, reflections, shadowOpacity, shadowSoftness, shadowDistance, keyframes
+        case enabled, model, finish, yaw, pitch, rotation, position, scale, lid, dynamicIsland, islandSize, islandOffset, perspective,
+             animation, background, backgroundColor, brightness, lightAngle, reflections, shadowOpacity, shadowSoftness, shadowDistance, keyframes
         case tiltDirection, tiltStrength, lean
     }
 
@@ -260,6 +268,8 @@ public struct Device3DSettings: Codable, Equatable {
         try c.encode(scale, forKey: .scale)
         try c.encode(lid, forKey: .lid)
         try c.encode(dynamicIsland, forKey: .dynamicIsland)
+        try c.encode(islandSize, forKey: .islandSize)
+        try c.encode(islandOffset, forKey: .islandOffset)
         try c.encode(perspective, forKey: .perspective)
         try c.encode(animation, forKey: .animation)
         try c.encode(background, forKey: .background)
@@ -274,7 +284,7 @@ public struct Device3DSettings: Codable, Equatable {
     }
 
     /// Whether a take is drawn on this model: an iPhone take on a phone, a screen recording on a laptop.
-    public func applies(to clip: Clip) -> Bool { model.kind == .phone ? clip.device != nil : clip.device == nil }
+    public func applies(to clip: Clip) -> Bool { model.kind == .phone ? clip.device != nil && !clip.isAndroid : clip.device == nil }
 
     /// The pose controls' own values (used while there are no keyframes).
     public var placement: Device3DPlacement {
