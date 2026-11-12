@@ -9,12 +9,8 @@ import AppKit
 import SliceCore
 import SwiftUI
 
-/// Handling the 3D phone in the preview, as in a 3D viewer: drag moves it anywhere (off the frame too), ⌥-drag (or a
-/// right-drag) turns it freely all the way round, ⇧-drag spins it in the picture, scroll or pinch resizes it, a
-/// trackpad's rotate spins it, and a double-click puts the pose back.
 struct Device3DPoseOverlay: NSViewRepresentable {
     let editor: EditorModel
-
     func makeNSView(context: Context) -> PoseCanvas {
         let view = PoseCanvas()
         view.editor = editor
