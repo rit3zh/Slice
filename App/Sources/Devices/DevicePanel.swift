@@ -253,7 +253,7 @@ private struct LiveDeviceThumbnail: View {
     }
 }
 
-private struct ColorSwatch: View {
+struct ColorSwatch: View {
     let model: String
     let color: DeviceColor
     let url: URL?
