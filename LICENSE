@@ -88,6 +88,7 @@ Some parts of the Software were made by others and are under their own licenses.
 - SmoothGradient: Smooth gradient interpolation, by Ramon Torres. MIT License. https://github.com/raymondjavaxx/SmoothGradient
 - BorderBeamKit: The capture bar's animated border, a SwiftUI port of border-beam by Jakub Antalik. Credited to the original author. https://beam.jakubantalik.com
 - Sparkle: In-app updates from Slice's GitHub releases. MIT License. https://github.com/sparkle-project/Sparkle
+- Safari mockup: The browser window drawn around screen recordings, after the Safari component in Magic UI. MIT License. https://github.com/magicuidesign/magicui
 - 3D device models: The iPhones and MacBook in the 3D editor, by the Sketchfab artists named in the credits. CC BY 4.0, except the iPhone 18 Pro Max (Sketchfab Standard). https://github.com/rit3zh/slice/blob/main/Sources/SliceCore/Resources/Models/CREDITS.txt
 - Keyboard sound packs: Cherry MX Blue (Hai Nguyen) and Holy Panda (Thomas Lai) keystroke sounds. MIT License. https://github.com/rit3zh/slice/tree/main/Sources/SliceCore/Resources/Sounds/Keyboards
 - Apex Pro sound pack: Keystroke sounds. GNU GPL 3.0. https://github.com/rit3zh/slice/tree/main/Sources/SliceCore/Resources/Sounds/Keyboards/apex-pro
