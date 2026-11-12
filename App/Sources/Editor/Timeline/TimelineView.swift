@@ -319,7 +319,8 @@ struct TimelineView: View {
         switch layout {
         case .hidden: "Hidden"
         case let .centre(c): "Centre \(Int(c * 100))%"
-        case let .split(side): side == .left ? "Split ◧" : "Split ◨"
+        case let .split(side, share):
+            (side == .left ? "Split ◧" : "Split ◨") + (share.map { " \(Int((100 * (1 - $0)).rounded()))/\(Int((100 * $0).rounded()))" } ?? "")
         case .fullscreen: "Full screen"
         case let .corner(corner, shape, size):
             "\(corner.short) \(shape.rawValue.capitalized) \(size == .small ? "S" : "L")"
