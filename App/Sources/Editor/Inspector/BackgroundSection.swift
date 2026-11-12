@@ -37,6 +37,7 @@ struct BackgroundSection: View {
     @State private var chosenTab: BackgroundTab?
 
     private var style: FrameStyle { editor.project.style }
+    private var hasMockup: Bool { style.mockup.kind != .none }
 
     private var tab: BackgroundTab {
         if let chosenTab { return chosenTab }
@@ -84,18 +85,27 @@ struct BackgroundSection: View {
                 Group {
                     PanelSlider("Corner radius", value: $editor.project.style.screenCornerRadius, in: 0 ... 0.05,
                                 default: FrameStyle().screenCornerRadius) { percent($0, of: 0 ... 0.05) }
+                        .disabled(hasMockup)
+                        .opacity(hasMockup ? 0.45 : 1)
+                        .help(hasMockup ? "The mockup has its own corners" : "")
                     PanelSlider("Shadow", value: $editor.project.style.shadow, in: 0 ... 1, default: FrameStyle().shadow) {
                         percent($0, of: 0 ... 1)
                     }
                     PanelSlider("Border", value: $editor.project.style.screenBorder, in: 0 ... 1, default: 0) {
                         $0 < 0.01 ? "None" : percent($0, of: 0 ... 1)
                     }
-                    .help("A thin light edge around the screen, like a bezel catching the light")
+                    .disabled(hasMockup)
+                    .opacity(hasMockup ? 0.45 : 1)
+                    .help(hasMockup ? "The mockup has its own edge" : "A thin light edge around the screen, like a bezel catching the light")
                 }
                 .disabled(style.padding < 0.0005)
                 .opacity(style.padding < 0.0005 ? 0.45 : 1)
                 .help(style.padding < 0.0005 ? "Add some padding to round the corners or cast a shadow" : "")
             }
+
+            PanelDivider()
+
+            MockupSection(editor: editor)
 
             PanelDivider()
 
