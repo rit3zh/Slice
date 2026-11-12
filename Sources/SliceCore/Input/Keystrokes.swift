@@ -10,9 +10,35 @@ import Foundation
 public struct KeystrokeSettings: Codable, Equatable {
     public enum Position: String, Codable, CaseIterable { case bottom, top }
 
+    /// Which presses are shown. Raw values are saved in projects, so never rename them.
+    public enum Show: String, Codable, CaseIterable {
+        /// Presses with ⌘, ⌃ or ⌥.
+        case shortcuts
+        /// Those and keys like esc, return and the arrows on their own.
+        case keys
+        /// Those and what's typed, as a line of text; only in takes recorded with typed text.
+        case typing
+    }
+
+    /// How a press is drawn. Raw values are saved in projects, so never rename them.
+    public enum Style: String, Codable, CaseIterable {
+        case dark, light, keycaps, minimal
+    }
+
+    public enum Alignment: String, Codable, CaseIterable { case leading, center, trailing }
+
+    /// One press at a time, each replacing the last, or a stack of them, newest nearest the edge, as KeyCastr shows
+    /// them. Raw values are saved in projects, so never rename them.
+    public enum Layout: String, Codable, CaseIterable { case single, stack }
+
     public var visible = true
-    public var singleKeys = false
+    public var show: Show = .shortcuts
+    public var style: Style = .dark
     public var position: Position = .bottom
+    public var alignment: Alignment = .center
+    public var layout: Layout = .single
+    /// Typed words shown as dots instead, compared without case or punctuation.
+    public var hiddenWords: [String] = []
     public var size = 0.04
     public var hold = 1.4
     public var sound: KeyboardSound = .none
@@ -20,17 +46,56 @@ public struct KeystrokeSettings: Codable, Equatable {
 
     public init() {}
 
+    /// Single keys shown along with shortcuts, as the setting was before typing could be shown.
+    public var singleKeys: Bool {
+        get { show != .shortcuts }
+        set { show = newValue ? max(show, .keys) : .shortcuts }
+    }
+
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = KeystrokeSettings()
         visible = try c.decodeIfPresent(Bool.self, forKey: .visible) ?? d.visible
-        singleKeys = try c.decodeIfPresent(Bool.self, forKey: .singleKeys) ?? d.singleKeys
+        if let show = try? c.decodeIfPresent(Show.self, forKey: .show) {
+            self.show = show
+        } else {
+            show = try c.decodeIfPresent(Bool.self, forKey: .singleKeys) == true ? .keys : d.show
+        }
+        style = (try? c.decodeIfPresent(Style.self, forKey: .style)) ?? d.style
         position = (try? c.decodeIfPresent(Position.self, forKey: .position)) ?? d.position
+        alignment = (try? c.decodeIfPresent(Alignment.self, forKey: .alignment)) ?? d.alignment
+        layout = (try? c.decodeIfPresent(Layout.self, forKey: .layout)) ?? d.layout
+        hiddenWords = try c.decodeIfPresent([String].self, forKey: .hiddenWords) ?? d.hiddenWords
         size = try c.decodeIfPresent(Double.self, forKey: .size) ?? d.size
         hold = try c.decodeIfPresent(Double.self, forKey: .hold) ?? d.hold
         sound = (try? c.decodeIfPresent(KeyboardSound.self, forKey: .sound)) ?? d.sound
         soundVolume = try c.decodeIfPresent(Double.self, forKey: .soundVolume) ?? d.soundVolume
     }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(visible, forKey: .visible)
+        try c.encode(show, forKey: .show)
+        // Kept for older versions, which read only this.
+        try c.encode(singleKeys, forKey: .singleKeys)
+        try c.encode(style, forKey: .style)
+        try c.encode(position, forKey: .position)
+        try c.encode(alignment, forKey: .alignment)
+        try c.encode(layout, forKey: .layout)
+        try c.encode(hiddenWords, forKey: .hiddenWords)
+        try c.encode(size, forKey: .size)
+        try c.encode(hold, forKey: .hold)
+        try c.encode(sound, forKey: .sound)
+        try c.encode(soundVolume, forKey: .soundVolume)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case visible, show, singleKeys, style, position, alignment, layout, hiddenWords, size, hold, sound, soundVolume
+    }
+}
+
+extension KeystrokeSettings.Show: Comparable {
+    public static func < (a: Self, b: Self) -> Bool { allCases.firstIndex(of: a)! < allCases.firstIndex(of: b)! }
 }
 
 public struct KeyHit: Codable, Equatable {
@@ -139,20 +204,33 @@ public struct KeyPress: Codable, Equatable {
 
     public var isShortcut: Bool { modifiers.contains { "⌘⌃⌥".contains($0) } }
 
+    /// A character typed as text, rather than a shortcut or a named key: only in takes recorded with typed text.
+    public var isTyped: Bool { !isShortcut && !Self.names.contains(key) }
+
     public var label: String { modifiers.isEmpty ? key : "\(modifiers) \(key)" }
 
-    public static func make(t: Double, keyCode: UInt16, characters: String?,
+    /// `text`, what the press typed, is given only when typed text is being recorded; without it plain typing is
+    /// never kept.
+    public static func make(t: Double, keyCode: UInt16, characters: String?, text: String? = nil,
                             control: Bool, option: Bool, shift: Bool, command: Bool) -> KeyPress? {
         let modifiers = (control ? "⌃" : "") + (option ? "⌥" : "") + (shift ? "⇧" : "") + (command ? "⌘" : "")
         let shortcut = control || option || command
         if let named = namedKeys[keyCode] {
-            if keyCode == 49, !shortcut { return nil }
-            return KeyPress(t: t, modifiers: modifiers, key: named)
+            if keyCode == 49, !shortcut, text == nil { return nil }
+            return KeyPress(t: t, modifiers: keyCode == 49 && !shortcut ? "" : modifiers, key: named)
         }
-        guard shortcut, let c = characters?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), !c.isEmpty,
+        if !shortcut {
+            // The character as typed, shift and all, so "A" and "?" come out as they did on screen.
+            guard let text, !text.isEmpty, text.count <= 4, text.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) })
+            else { return nil }
+            return KeyPress(t: t, modifiers: "", key: text)
+        }
+        guard let c = characters?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), !c.isEmpty,
               c.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) }) else { return nil }
         return KeyPress(t: t, modifiers: modifiers, key: c)
     }
+
+    static let names = Set(namedKeys.values)
 
     static let namedKeys: [UInt16: String] = [
         36: "↩", 76: "⌅", 48: "⇥", 49: "Space", 51: "⌫", 117: "⌦", 53: "esc",
@@ -161,92 +239,4 @@ public struct KeyPress: Codable, Equatable {
         103: "F11", 111: "F12", 105: "F13", 107: "F14", 113: "F15", 106: "F16", 64: "F17", 79: "F18", 80: "F19",
         90: "F20",
     ]
-}
-
-public struct KeystrokeState: Equatable {
-    public var label: String
-    public var count: Int
-    public var opacity: Double
-    public var blur: Double
-    public var scale: Double
-    public var drop: Double
-}
-
-public struct KeystrokeTimeline {
-    struct Group {
-        var label: String
-        var presses: [Double]
-        var inStart: Double
-        var outStart = 0.0
-        var outDuration = 0.0
-    }
-
-    private(set) var groups: [Group] = []
-
-    static let inDuration = 0.32
-    static let outDuration = 0.28
-    static let swapOut = 0.12
-    static let swapDelay = 0.05
-    static let pulse = 0.2
-
-    public init(presses: [KeyPress], settings: KeystrokeSettings) {
-        guard settings.visible else { return }
-        let hold = max(settings.hold, 0.2)
-        for p in presses.sorted(by: { $0.t < $1.t }) where p.isShortcut || settings.singleKeys {
-            let label = p.label
-            if let last = groups.last, last.label == label, let prev = last.presses.last, p.t - prev <= hold {
-                groups[groups.count - 1].presses.append(p.t)
-            } else {
-                groups.append(Group(label: label, presses: [p.t], inStart: p.t))
-            }
-        }
-        for i in groups.indices {
-            let natural = groups[i].presses.last! + hold
-            guard i + 1 < groups.count else {
-                groups[i].outStart = natural
-                groups[i].outDuration = Self.outDuration
-                continue
-            }
-            let next = groups[i + 1].presses[0]
-            if next < natural + Self.outDuration {
-                let end = min(natural + Self.outDuration, next + Self.swapOut)
-                groups[i].outStart = min(natural, next)
-                groups[i].outDuration = max(end - groups[i].outStart, 0.01)
-                groups[i + 1].inStart = next + Self.swapDelay
-            } else {
-                groups[i].outStart = natural
-                groups[i].outDuration = Self.outDuration
-            }
-        }
-    }
-
-    public var isEmpty: Bool { groups.isEmpty }
-
-    public func states(at t: Double) -> [KeystrokeState] {
-        guard let i = groups.lastIndex(where: { $0.presses[0] <= t }) else { return [] }
-        return [i - 2, i - 1, i].compactMap { $0 >= 0 ? state(groups[$0], at: t) : nil }
-    }
-
-    private func state(_ g: Group, at t: Double) -> KeystrokeState? {
-        guard t >= g.inStart, t < g.outStart + g.outDuration else { return nil }
-        let a = min((t - g.inStart) / Self.inDuration, 1)
-        let o = min(max((t - g.outStart) / g.outDuration, 0), 1)
-        let settle = 1 - pow(1 - a, 3)
-        let shown = 1 - pow(1 - min(a / 0.6, 1), 2)
-        let blurOut = 1 - pow(1 - o, 2)
-        var blur = max(1 - settle, blurOut)
-        var scale = (0.92 + 0.08 * settle) * (1 - 0.06 * o * o)
-        var count = 1
-        for (k, p) in g.presses.enumerated().dropFirst() where t >= p {
-            let b = (t - p) / Self.pulse
-            if b >= 0.5 { count = k + 1 }
-            if b < 1 {
-                let bump = sin(.pi * b)
-                blur = max(blur, 0.4 * bump)
-                scale *= 1 - 0.05 * bump
-            }
-        }
-        return KeystrokeState(label: g.label, count: count, opacity: shown * (1 - o * o * (3 - 2 * o)), blur: blur,
-                              scale: scale, drop: 0.18 * (1 - settle))
-    }
 }
