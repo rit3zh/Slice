@@ -36,9 +36,11 @@ final class OverdubWriter {
         if cameraInput == nil {
             guard let fmt = CMSampleBufferGetFormatDescription(sample) else { return }
             let dims = CMVideoFormatDescriptionGetDimensions(fmt)
+            // macOS 26 rejects `AVVideoQualityKey` for H.264 (it raises from AVAssetWriterInput), so the
+            // camera track asks for a bitrate instead: ~3 bits per pixel per second.
             let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
                 AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: dims.width, AVVideoHeightKey: dims.height,
-                AVVideoCompressionPropertiesKey: [AVVideoQualityKey: 0.8],
+                AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: Int(dims.width) * Int(dims.height) * 3],
             ])
             input.expectsMediaDataInRealTime = true
             camera.add(input)

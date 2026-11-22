@@ -54,9 +54,14 @@ public enum Exporter {
         var compression: [String: Any] = [
             AVVideoAverageBitRateKey: settings.bitRate(for: size, duration: project.duration),
             AVVideoExpectedSourceFrameRateKey: settings.fps,
-            AVVideoMaxKeyFrameIntervalDurationKey: 2,
         ]
-        if !settings.hevc { compression[AVVideoProfileLevelKey] = AVVideoProfileLevelH264HighAutoLevel }
+        if settings.hevc {
+            // HEVC only takes the keyframe interval in frames; a duration raises from AVAssetWriterInput.
+            compression[AVVideoMaxKeyFrameIntervalKey] = max(settings.fps * 2, 1)
+        } else {
+            compression[AVVideoMaxKeyFrameIntervalDurationKey] = 2
+            compression[AVVideoProfileLevelKey] = AVVideoProfileLevelH264HighAutoLevel
+        }
         let videoIn = AVAssetWriterInput(mediaType: .video, outputSettings: [
             AVVideoCodecKey: settings.hevc ? AVVideoCodecType.hevc : AVVideoCodecType.h264,
             AVVideoWidthKey: size.width, AVVideoHeightKey: size.height,

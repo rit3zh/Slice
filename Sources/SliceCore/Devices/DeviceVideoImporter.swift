@@ -198,14 +198,17 @@ public enum DeviceVideoImporter {
 
         let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
         let fps = try await track.load(.nominalFrameRate)
+        // HEVC with alpha rejects a keyframe interval given as a duration: AVAssetWriterInput raises
+        // from its initialiser. Frames work for both, so the import asks for a keyframe a second.
+        let frameRate = fps > 0 ? Int(fps.rounded()) : 60
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
             AVVideoCodecKey: AVVideoCodecType.hevcWithAlpha,
             AVVideoWidthKey: size.width, AVVideoHeightKey: size.height,
             AVVideoCompressionPropertiesKey: [
                 AVVideoQualityKey: 0.9,
                 kVTCompressionPropertyKey_TargetQualityForAlpha as String: 0.9,
-                AVVideoExpectedSourceFrameRateKey: fps > 0 ? Int(fps.rounded()) : 60,
-                AVVideoMaxKeyFrameIntervalDurationKey: 1,
+                AVVideoExpectedSourceFrameRateKey: frameRate,
+                AVVideoMaxKeyFrameIntervalKey: frameRate,
             ] as [String: Any],
         ])
         input.expectsMediaDataInRealTime = false

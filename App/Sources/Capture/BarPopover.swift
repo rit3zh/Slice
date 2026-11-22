@@ -220,7 +220,10 @@ enum BarClickThrough {
             return
         }
         guard timer == nil else { return }
-        let t = Timer(timeInterval: 1.0 / 60, repeats: true) { _ in MainActor.assumeIsolated { update() } }
+        // The timer fires on RunLoop.main with no Swift task running, and on macOS 26 the runtime's
+        // main-executor check behind `MainActor.assumeIsolated` faults in exactly that context (a null
+        // witness entry in libswift_Concurrency, SIGSEGV at 0x0). Hop onto the main actor as a task instead.
+        let t = Timer(timeInterval: 1.0 / 60, repeats: true) { _ in Task { @MainActor in update() } }
         RunLoop.main.add(t, forMode: .common)
         timer = t
         update()
