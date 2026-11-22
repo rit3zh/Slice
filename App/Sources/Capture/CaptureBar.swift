@@ -26,6 +26,10 @@ struct CaptureBar: View {
     @AppStorage("setup.micChosen") var micChosen = false
     @AppStorage("setup.frameRate") var fps = Recorder.Settings.best
     @AppStorage("setup.screenAudio") var screenAudio = true
+    /// The one app whose sound is recorded, by bundle id; empty records the system mix.
+    @AppStorage("setup.audioApp") var audioApp = ""
+    @AppStorage("setup.audioAppName") var audioAppName = ""
+    @State var audioApps: [AudioApp] = []
     @AppStorage("setup.keys") var keys = true
     @AppStorage("setup.typing") var typing = false
     @AppStorage("setup.showCamera") var showCamera = true
@@ -278,6 +282,8 @@ struct CaptureBar: View {
         }
         let settings = Recorder.Settings(source: source, cameraID: cameraID.isEmpty ? nil : cameraID,
                                          micID: micID.isEmpty ? nil : micID, fps: fps, screenAudio: screenAudio,
+                                         audioApp: kind == .device || audioApp.isEmpty ? nil : audioApp,
+                                         audioAppName: audioAppName.isEmpty ? nil : audioAppName,
                                          keys: keys, typing: typing, showCamera: showCamera)
         model.startRecording(settings: settings, appendTo: model.setupAppendTo)
     }
