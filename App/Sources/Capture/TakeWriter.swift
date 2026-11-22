@@ -51,7 +51,11 @@ final class TakeWriter {
             AVVideoQualityKey: 0.9,
             AVVideoExpectedSourceFrameRateKey: fps,
             AVVideoAllowFrameReorderingKey: false,
-            AVVideoMaxKeyFrameIntervalDurationKey: 1,
+            // HEVC rejects a keyframe interval given as a duration: AVAssetWriterInput raises
+            // "Compression property MaxKeyFrameIntervalDuration is not supported for video codec type hvc1"
+            // straight out of its initialiser. Swift can't catch that, so the take died at the countdown.
+            // A keyframe a second, counted in frames, is accepted.
+            AVVideoMaxKeyFrameIntervalKey: max(fps, 1),
         ]
         if alpha { compression[kVTCompressionPropertyKey_TargetQualityForAlpha as String] = 0.9 }
         screenInput = AVAssetWriterInput(mediaType: .video, outputSettings: [
@@ -147,9 +151,12 @@ final class TakeWriter {
         if !cameraStarted {
             guard let fmt = CMSampleBufferGetFormatDescription(sample) else { return }
             let dims = CMVideoFormatDescriptionGetDimensions(fmt)
+            // macOS 26 rejects `AVVideoQualityKey` for H.264 ("Compression property Quality is not
+            // supported for video codec type avc1") and raises it out of the initialiser, on the capture
+            // queue, which takes the whole app down. A bitrate is accepted: ~3 bits per pixel per second.
             let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
                 AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: dims.width, AVVideoHeightKey: dims.height,
-                AVVideoCompressionPropertiesKey: [AVVideoQualityKey: 0.8],
+                AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: Int(dims.width) * Int(dims.height) * 3],
             ])
             input.expectsMediaDataInRealTime = true
             camera.add(input)

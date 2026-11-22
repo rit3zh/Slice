@@ -82,6 +82,10 @@ private struct WindowActions: ViewModifier {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var launched = false
+    /// Installed at launch. `applicationWillTerminate` calls it directly instead of re-entering the main
+    /// actor through `MainActor.assumeIsolated`: that runtime check faults inside an AppKit callback on
+    /// macOS 26 (SIGSEGV in libswift_Concurrency), which crashed every quit.
+    private var closeEditorOnQuit: (() -> Void)?
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
@@ -93,12 +97,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        MainActor.assumeIsolated { AppModel.shared.openEditor?.close() }
+        closeEditorOnQuit?()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         launched = true
         MainActor.assumeIsolated {
+            closeEditorOnQuit = { AppModel.shared.openEditor?.close() }
             DeviceManager.shared.start()
             AnnotationController.shared.install()
         }
