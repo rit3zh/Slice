@@ -5,8 +5,16 @@
 //  Created by rit3zh CX on 10/1/26.
 //
 
+import AppKit
 import ApplicationServices
+import ScreenCaptureKit
 import SwiftUI
+
+/// An app whose sound can be recorded on its own.
+struct AudioApp: Identifiable, Hashable {
+    let id: String
+    let name: String
+}
 
 extension CaptureBar {
     var micName: String? { mics.first { $0.uniqueID == micID }?.localizedName }
@@ -101,6 +109,9 @@ extension CaptureBar {
             VStack(alignment: .leading, spacing: 8) {
                 SectionTitle("Audio & keys")
                 OptionToggle(kind != .device ? "Record sound from apps" : "Record the iPhone's sound", isOn: $screenAudio)
+                if screenAudio, kind != .device {
+                    audioAppPicker
+                }
                 if kind != .device {
                     OptionToggle("Record keyboard", isOn: $keys.animation(.snappy))
                         .help("For showing the shortcuts you press over the video, and for typing sounds. Shortcuts (⌘, ⌃ or ⌥ with a key) and keys like esc and the arrows are recorded; for typing, only when a key went down, never which one.")
@@ -138,6 +149,94 @@ extension CaptureBar {
         .frame(width: 290)
         .environment(\.barGlide, BarGlide(tracker: optionsGlide, namespace: optionsSpace))
         .barPopoverAppearance()
+        .task { await loadAudioApps() }
+        .onChange(of: audioApp) { syncAudioAppName() }
+    }
+
+    /// Which app's sound is recorded: the whole system mix, or one app on its own. Picking one app keeps every other
+    /// sound out of the file — including the delayed copy a monitoring or room-correction audio device adds back.
+    var audioAppPicker: some View {
+        let picked = !audioApp.isEmpty
+        return HStack(spacing: 8) {
+            Image(systemName: "speaker.wave.2")
+                .font(.system(size: 12, weight: .medium))
+                .frame(width: 16)
+                .foregroundStyle(.secondary)
+            Text("Sound from").foregroundStyle(.secondary)
+            Spacer(minLength: 6)
+            // A menu, not a Picker(.menu): a picker measures itself by its widest item, which made the popover
+            // wider than its 290 points and pushed the options out of view on the left.
+            Menu {
+                audioAppMenuItem("All apps", selected: !picked) { audioApp = "" }
+                if !audioApps.isEmpty { Divider() }
+                ForEach(audioApps) { app in
+                    audioAppMenuItem(app.name, selected: audioApp == app.id) { audioApp = app.id }
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    if picked {
+                        Circle().fill(Color.green).frame(width: 7, height: 7)
+                    }
+                    Text(picked ? (audioAppName.isEmpty ? audioApp : audioAppName) : "All apps")
+                        .fontWeight(picked ? .semibold : .regular)
+                        .foregroundStyle(picked ? Color.primary : Color.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 8, weight: .bold))
+                        .opacity(0.5)
+                }
+                .frame(width: 116, alignment: .trailing)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+        }
+        .help(picked
+            ? "Only \(audioAppName.isEmpty ? "the chosen app" : audioAppName) is recorded. Set it back to All apps to record the system mix."
+            : "Records one app's sound instead of the system mix. Audio devices that add a delayed copy to the output — ListenHub and the like — stay out of the recording.")
+    }
+
+    private func audioAppMenuItem(_ title: String, selected: Bool, choose: @escaping () -> Void) -> some View {
+        // Only the picked row carries the checkmark. A hidden one (`opacity(0)`) doesn't work: menus draw the
+        // item's image whatever its opacity, so every row came out ticked.
+        Button(action: choose) {
+            if selected {
+                Label(title, systemImage: "checkmark")
+            } else {
+                Text(title)
+            }
+        }
+    }
+
+    func loadAudioApps() async {
+        guard let content = try? await SourceResolver.shareableContent() else { return }
+        let me = Bundle.main.bundleIdentifier
+        var seen = Set<String>()
+        var apps: [AudioApp] = []
+        // Only apps a person runs: Screen Capture Kit also lists helpers, agents and XPC services (AutoFill,
+        // CursorUIViewService, Open and Save Panel Service, the Dock…), and none of those have sound of their own.
+        for app in NSWorkspace.shared.runningApplications where !app.isTerminated && app.activationPolicy == .regular {
+            guard let id = app.bundleIdentifier, id != me, app.bundleURL?.pathExtension == "app",
+                  seen.insert(id).inserted,
+                  content.applications.contains(where: { $0.bundleIdentifier == id }) else { continue }
+            apps.append(AudioApp(id: id, name: app.localizedName ?? id))
+        }
+        apps.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        // The app picked last time may not be running now: still offer it, so the choice isn't silently lost.
+        if !audioApp.isEmpty, !apps.contains(where: { $0.id == audioApp }) {
+            apps.insert(AudioApp(id: audioApp, name: audioAppName.isEmpty ? audioApp : audioAppName), at: 0)
+        }
+        audioApps = apps
+        syncAudioAppName()
+    }
+
+    func syncAudioAppName() {
+        guard !audioApp.isEmpty else {
+            audioAppName = ""
+            return
+        }
+        if let name = audioApps.first(where: { $0.id == audioApp })?.name, name != audioAppName { audioAppName = name }
     }
 
     var bestRateLabel: String {

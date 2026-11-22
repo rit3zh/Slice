@@ -37,11 +37,14 @@ enum CaptureError: LocalizedError {
     case noScreenPermission
     case deviceNotStreaming(String)
     case interrupted(String)
+    case appNotRunning(String)
 
     var errorDescription: String? {
         switch self {
         case .sourceGone: "The selected display or window is no longer available."
         case let .deviceNotStreaming(name): "\(name) isn't streaming its screen. Check it's connected and unlocked, then try again."
+        case let .appNotRunning(name):
+            "\(name) isn't running, so its sound can't be recorded. Open it, or pick another app in Options."
         case .noScreenPermission:
             "Screen Recording permission is needed. Enable it in System Settings > Privacy & Security > Screen & System Audio Recording, then reopen the app."
         case let .interrupted(reason): "Recording stopped: \(reason)"

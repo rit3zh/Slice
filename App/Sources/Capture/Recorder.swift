@@ -18,6 +18,10 @@ final class Recorder: NSObject, @unchecked Sendable {
         var micID: String?
         var fps = Settings.best
         var screenAudio = true
+        /// The one app whose sound is recorded, by bundle id; nil records the system mix.
+        var audioApp: String?
+        /// Its name, for messages.
+        var audioAppName: String?
         var keys = true
         /// Typed characters are recorded along with shortcuts, to show what was typed.
         var typing = false
@@ -40,6 +44,8 @@ final class Recorder: NSObject, @unchecked Sendable {
     /// (or resumed) while nothing moves begins with this one, at the moment Record was pressed.
     var latestScreen: CMSampleBuffer?
     var stream: SCStream?
+    /// The second, audio-only stream that records a single app, when one is picked in Options.
+    var audioStream: SCStream?
     var session: AVCaptureSession?
     var take: TakeWriter?
     let micLevel = LevelBox()
@@ -92,15 +98,18 @@ final class Recorder: NSObject, @unchecked Sendable {
         config.colorSpaceName = CGColorSpace.sRGB
         config.showsCursor = false
         config.queueDepth = 8
-        config.capturesAudio = settings.screenAudio
+        config.capturesAudio = settings.screenAudio && settings.audioApp == nil
         config.excludesCurrentProcessAudio = true
         config.sampleRate = 48000
         config.channelCount = 2
         let stream = SCStream(filter: resolved.filter, configuration: config, delegate: self)
         try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: queue)
-        if settings.screenAudio { try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: queue) }
+        if settings.screenAudio, settings.audioApp == nil { try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: queue) }
         try await stream.startCapture()
         self.stream = stream
+        if settings.screenAudio, let app = settings.audioApp {
+            audioStream = try await appAudioStream(app, named: settings.audioAppName ?? app)
+        }
         let source = settings.source
         let observer = NotificationCenter.default.addObserver(forName: DeviceWindowController.windowsDidChange, object: nil,
                                                               queue: .main) { [weak self] _ in
@@ -110,6 +119,37 @@ final class Recorder: NSObject, @unchecked Sendable {
             }
         }
         await MainActor.run { observers.append(observer) }
+    }
+
+    /// Records the sound of one app only. Screen Capture Kit captures the audio of whatever its filter includes, so a
+    /// second, audio-only stream filtered to that app leaves the rest of the system out of the file — including the
+    /// delayed copy a monitoring or room-correction audio device adds back to the output.
+    private func appAudioStream(_ bundleID: String, named name: String) async throws -> SCStream {
+        let content = try await SourceResolver.shareableContent()
+        guard let app = content.applications.first(where: { $0.bundleIdentifier == bundleID }) else {
+            throw CaptureError.appNotRunning(name)
+        }
+        let wanted: CGDirectDisplayID
+        switch settings.source {
+        case let .display(id), let .area(id, _): wanted = id
+        default: wanted = NSScreen.main?.displayID ?? CGMainDisplayID()
+        }
+        guard let display = content.displays.first(where: { $0.displayID == wanted }) ?? content.displays.first else {
+            throw CaptureError.sourceGone
+        }
+        let config = SCStreamConfiguration()
+        config.capturesAudio = true
+        config.excludesCurrentProcessAudio = true
+        config.sampleRate = 48000
+        config.channelCount = 2
+        // The app's windows stay in the filter: Screen Capture Kit needs them to give the app's audio at all —
+        // leaving them out makes the stream deliver no sound (checked). macOS marks the captured windows with its
+        // purple "being recorded" badge as a side effect; there is no way to ask it not to.
+        let audio = SCStream(filter: SCContentFilter(display: display, including: [app], exceptingWindows: []),
+                             configuration: config, delegate: self)
+        try audio.addStreamOutput(self, type: .audio, sampleHandlerQueue: queue)
+        try await audio.startCapture()
+        return audio
     }
 
     func prepareCameraAndMic() throws {
@@ -213,6 +253,8 @@ final class Recorder: NSObject, @unchecked Sendable {
             observers = []
         }
         onInterrupted = nil
+        if let audioStream { try? await audioStream.stopCapture() }
+        audioStream = nil
         if let stream { try? await stream.stopCapture() }
         stream = nil
         if let device { device.consumers.forEach(device.stream.removeConsumer) }
